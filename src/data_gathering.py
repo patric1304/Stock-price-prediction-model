@@ -3,7 +3,9 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import requests
+import json
 from datetime import datetime, timedelta
+from pathlib import Path
 from transformers import pipeline
 from src.config import (
     HISTORY_DAYS,
@@ -11,6 +13,10 @@ from src.config import (
     NEWSAPI_ENDPOINT,
     INCLUDE_GLOBAL_SENTIMENT,
 )
+
+
+CACHE_DIR = Path("data/raw/news_cache")
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # -----------------------
 # Sentiment Analysis Setup
@@ -23,14 +29,18 @@ def _get_sentiment_pipeline():
         _sentiment_pipeline = pipeline("sentiment-analysis")
     return _sentiment_pipeline
 
-
 # -----------------------
-# NewsAPI.org Fetching
+# NewsAPI.org Fetching with cache
 # -----------------------
 def fetch_newsapi_headlines(query: str, from_date: str, to_date: str, page_size: int = 20):
     """
-    Fetch headlines for a given ticker or global topic using NewsAPI.org
+    Fetch headlines for a ticker or global topic using NewsAPI.org with caching.
     """
+    cache_file = CACHE_DIR / f"{query}_{from_date}_{to_date}.json"
+    if cache_file.exists():
+        with open(cache_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+
     params = {
         "q": query,
         "from": from_date,
@@ -44,13 +54,19 @@ def fetch_newsapi_headlines(query: str, from_date: str, to_date: str, page_size:
     j = resp.json()
     if j.get("status") != "ok":
         print(f"[WARN] NewsAPI error for {query}: {j}")
-        return []
-    return [a.get("title", "") for a in j.get("articles", [])]
+        headlines = []
+    else:
+        headlines = [a.get("title", "") for a in j.get("articles", [])]
 
+    # Save cache
+    with open(cache_file, "w", encoding="utf-8") as f:
+        json.dump(headlines, f, ensure_ascii=False, indent=2)
+
+    return headlines
 
 def compute_sentiment_score(headlines):
     """
-    Compute sentiment score in [-1, 1] based on headlines.
+    Compute sentiment score in [-1, 1] using HuggingFace pipeline.
     """
     if not headlines:
         return 0.0
@@ -71,7 +87,6 @@ def compute_sentiment_score(headlines):
             scores.append(0.0)
     return float(np.mean(scores))
 
-
 # -----------------------
 # Main Data Gathering
 # -----------------------
@@ -83,16 +98,13 @@ def gather_data(ticker: str):
     end = datetime.today()
     start = end - timedelta(days=365)
 
-    # 1️⃣ Stock OHLCV from yfinance
     df = yf.download(ticker, start=start, end=end, progress=False)
     if df.empty:
         raise ValueError(f"No data found for {ticker}")
 
-    # 2️⃣ VIX Index as market-wide sentiment
     vix = yf.download("^VIX", start=start, end=end, progress=False)
     df["vix_index"] = vix["Close"].reindex(df.index).fillna(method="ffill")
 
-    # 3️⃣ Daily sentiment
     sentiments = []
     for dt in df.index:
         date_str = dt.strftime("%Y-%m-%d")
@@ -110,13 +122,11 @@ def gather_data(ticker: str):
     df["sentiment_comp"] = [s[0] for s in sentiments]
     df["sentiment_global"] = [s[1] for s in sentiments]
 
-    # 4️⃣ Synthetic macro features (constant or lightly randomized)
     np.random.seed(42)
     df["interest_rate"] = 5.0 + np.random.normal(0, 0.1, len(df))
     df["inflation_rate"] = 2.5 + np.random.normal(0, 0.05, len(df))
     df["gdp_growth"] = 1.8 + np.random.normal(0, 0.03, len(df))
 
-    # 5️⃣ Build supervised dataset
     X, y = [], []
     for i in range(HISTORY_DAYS, len(df) - 1):
         window = df.iloc[i - HISTORY_DAYS:i][["Open", "High", "Low", "Close", "Volume"]].values.flatten()
@@ -133,7 +143,7 @@ def gather_data(ticker: str):
 
 
 # -----------------------
-# Quick Test (Optional)
+# Quick Test
 # -----------------------
 if __name__ == "__main__":
     ticker = input("Enter stock ticker (e.g., AAPL, TSLA): ").strip().upper()
