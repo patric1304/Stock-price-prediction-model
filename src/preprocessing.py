@@ -1,3 +1,5 @@
+from sklearn.preprocessing import StandardScaler
+
 def scale_features(X, y=None):
     scaler_X = StandardScaler()
     X_scaled = scaler_X.fit_transform(X)

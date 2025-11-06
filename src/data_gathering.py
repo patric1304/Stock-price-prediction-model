@@ -117,7 +117,7 @@ def gather_data(ticker: str):
         window = df.iloc[i-HISTORY_DAYS:i][["Open","High","Low","Close","Volume"]].values.flatten()
         sentiment_vec = np.array(df.iloc[i][["sentiment_comp","sentiment_global"]], dtype=np.float32).flatten()
         macro_vec = np.array(df.iloc[i][["interest_rate","inflation_rate","gdp_growth"]], dtype=np.float32).flatten()
-        vix_value = df.iloc[i]["vix_index"]
+        vix_value = df["vix_index"].iloc[i]
         if pd.isna(vix_value):
             vix_value = 0.0
         market_vec = np.array([vix_value], dtype=np.float32).flatten()
