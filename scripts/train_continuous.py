@@ -13,35 +13,43 @@ import numpy as np
 from datetime import datetime
 import pickle
 
-# S&P 500 major stocks (optimized for API limits)
-SP500_STOCKS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B",
-    "UNH", "XOM", "JNJ", "JPM", "V", "PG", "MA", "HD", "CVX", "MRK",
-    "ABBV", "KO", "PEP", "AVGO", "COST", "WMT", "MCD", "CSCO", "ACN",
-    "TMO", "NFLX", "ABT", "CRM", "ORCL", "NKE", "INTC", "VZ", "CMCSA"
-]  # 36 stocks
+# Weekly rotation of S&P 500 stocks - trains different stocks each day
+STOCK_GROUPS = {
+    "monday": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META"],
+    "tuesday": ["TSLA", "BRK.B", "UNH", "JNJ", "V", "XOM"],
+    "wednesday": ["JPM", "WMT", "PG", "MA", "HD", "CVX"],
+    "thursday": ["LLY", "ABBV", "MRK", "KO", "AVGO", "PEP"],
+    "friday": ["COST", "ADBE", "TMO", "MCD", "CSCO", "ACN"],
+    "saturday": ["NKE", "ABT", "CRM", "DHR", "TXN", "NEE"],
+    "sunday": ["VZ", "INTC", "CMCSA", "AMD", "QCOM", "PM"]
+}
+
+# Auto-detect which day it is
+day_name = datetime.now().strftime("%A").lower()
+SP500_STOCKS = STOCK_GROUPS.get(day_name, STOCK_GROUPS["monday"])
 
 EPOCHS = 100
 CHECKPOINT_EVERY = 20
 
 print("=" * 70)
-print("🎯 BACKTEST TRAINING: S&P 500 HISTORICAL DATA")
+print("🎯 WEEKLY ROTATION TRAINING: S&P 500 STOCKS")
 print("=" * 70)
+print(f"\n� Today is {day_name.capitalize()}")
+print(f"🎯 Training on: {', '.join(SP500_STOCKS)}")
 print(f"\n📊 Training Strategy:")
-print(f"  • Fetch last 30 days of historical data")
-print(f"  • For each day: predict NEXT day's price")
-print(f"  • Compare prediction with ACTUAL price (known from history)")
-print(f"  • Train model by learning from prediction errors")
-print(f"  • Repeat across {len(SP500_STOCKS)} S&P 500 stocks")
-print(f"\n⚠️  NewsAPI Limitations:")
+print(f"  • Week 1: Train different stocks each day (6 stocks/day)")
+print(f"  • Model learns incrementally from previous days")
+print(f"  • After 7 days: Model trained on 42 different S&P 500 stocks")
+print(f"  • Week 2+: Switch to train_daily.py for maintenance")
+print(f"\n⚠️  NewsAPI Usage:")
 print(f"  • Free tier: {MAX_DAILY_REQUESTS} requests/day")
-print(f"  • This training: ~{len(SP500_STOCKS) * 2} requests (first run)")
-print(f"  • Subsequent runs: ~5-10 requests (cache is used)")
+print(f"  • Today's training: ~{len(SP500_STOCKS) * 2} requests (first run)")
+print(f"  • Subsequent runs today: ~5-10 requests (cache is used)")
 print("=" * 70)
 
 # Gather historical data
-print(f"\n📈 Gathering historical data from {len(SP500_STOCKS)} stocks...")
-print("   Each stock provides training samples where we KNOW the outcome\n")
+print(f"\n📈 Gathering data from today's {len(SP500_STOCKS)} stocks...")
+print("   Building on knowledge from previous days (if any)\n")
 
 all_X = []
 all_y = []
@@ -96,15 +104,30 @@ scalers_dir = Path("data/processed/scalers")
 for d in [models_dir, checkpoints_dir, logs_dir, scalers_dir]:
     d.mkdir(parents=True, exist_ok=True)
 
+# Load existing model if available (incremental training across days)
+existing_models = sorted(models_dir.glob("sp500_model_*.pth"))
+X_scaled, y_scaled, scaler_X, scaler_y = scale_features(X_combined, y_combined)
+input_dim = X_scaled.shape[1]
+
+if existing_models:
+    print(f"\n📦 Found existing model: {existing_models[-1].name}")
+    print("   Loading for incremental training...")
+    try:
+        model = torch.load(existing_models[-1])
+        print("   ✓ Model loaded - will add today's stocks to knowledge base")
+    except Exception as e:
+        print(f"   ⚠️  Could not load model: {e}")
+        print("   Starting fresh training...")
+        model = StockPredictor(input_dim)
+else:
+    print("\n🆕 No existing model found - starting fresh (Day 1)")
+    model = StockPredictor(input_dim)
+
 # Train the model
 print(f"\n🔥 Training model for {EPOCHS} epochs...")
-print(f"   Learning to predict tomorrow's price from today's data")
+print(f"   Learning patterns from {day_name.capitalize()}'s stocks")
 print("=" * 70)
 
-X_scaled, y_scaled, scaler_X, scaler_y = scale_features(X_combined, y_combined)
-
-input_dim = X_scaled.shape[1]
-model = StockPredictor(input_dim)
 criterion = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
@@ -177,17 +200,16 @@ print(f"💾 Scalers saved")
 # Save training log
 log_path = logs_dir / f"training_{timestamp}.txt"
 with open(log_path, "w") as f:
-    f.write("S&P 500 Backtest Training Log\n")
+    f.write(f"Weekly Rotation Training Log - {day_name.capitalize()}\n")
     f.write("=" * 70 + "\n")
-    f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+    f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    f.write(f"Day of Week: {day_name.capitalize()}\n\n")
     f.write(f"Training Strategy:\n")
-    f.write(f"  - Used historical data where outcomes are known\n")
-    f.write(f"  - Trained to predict next-day prices\n")
-    f.write(f"  - Learned from {len(successful_stocks)} S&P 500 stocks\n\n")
-    f.write(f"Dataset:\n")
-    f.write(f"  - Stocks: {', '.join(successful_stocks[:10])}\n")
-    if len(successful_stocks) > 10:
-        f.write(f"           ... and {len(successful_stocks)-10} more\n")
+    f.write(f"  - Week 1: Train different stocks each day\n")
+    f.write(f"  - Model learns incrementally from previous days\n")
+    f.write(f"  - After 7 days: 42 S&P 500 stocks trained\n\n")
+    f.write(f"Today's Dataset:\n")
+    f.write(f"  - Stocks: {', '.join(successful_stocks)}\n")
     f.write(f"  - Total samples: {len(X_combined):,}\n")
     f.write(f"  - Features: {X_combined.shape[1]}\n\n")
     f.write(f"Training:\n")
@@ -204,11 +226,15 @@ with open(log_path, "w") as f:
 
 print(f"📝 Training log saved: {log_path.name}")
 print("\n" + "=" * 70)
-print("🎉 MODEL IS READY!")
+print("✅ TRAINING COMPLETE!")
 print("=" * 70)
-print("\nNext steps:")
-print("  1. Check accuracy: python scripts/evaluate_model.py")
-print("  2. Make prediction: python scripts/run_inference.py")
-print("\n💡 The model learned from historical data and is ready to")
-print("   predict tomorrow's prices for any stock!")
+print(f"\n📊 Progress:")
+print(f"  • Today: Trained on {len(successful_stocks)} stocks ({day_name.capitalize()})")
+print(f"  • Strategy: Run this script daily for 7 days")
+print(f"  • After Week 1: Switch to 'python scripts/train_daily.py'")
+print(f"\n🎯 Next Actions:")
+print(f"  • Make prediction: python scripts/run_inference.py")
+print(f"  • Test accuracy: python scripts/evaluate_model.py")
+print(f"  • Tomorrow: python scripts/train_continuous.py (different stocks!)")
 print("=" * 70)
+
