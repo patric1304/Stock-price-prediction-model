@@ -71,10 +71,21 @@ def compute_sentiment_score(headlines):
     return float(np.mean(scores))
 
 # Gather stock + VIX + sentiment + macro features
-def gather_data(ticker: str):
+def gather_data(ticker: str, days_back=60):
+    """
+    Gather stock data with features (optimized for NewsAPI free tier).
+    
+    Args:
+        ticker: Stock ticker symbol
+        days_back: Number of days of stock price history (default: 60)
+                   News: Only last 20 days (optimized for API limits)
+    
+    Returns:
+        X, y: Feature matrix and target values
+    """
     end = datetime.today()
-    start_stock = end - timedelta(days=365)
-    NEWS_DAYS = 30
+    start_stock = end - timedelta(days=days_back)
+    NEWS_DAYS = 20  # OPTIMIZED: 20 days of news (3 weeks)
     start_news = end - timedelta(days=NEWS_DAYS)
 
     df = yf.download(ticker, start=start_stock, end=end, progress=False, auto_adjust=False)

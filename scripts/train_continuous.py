@@ -13,75 +13,47 @@ import numpy as np
 from datetime import datetime
 import pickle
 
-# Weekly rotation of S&P 500 stocks - MAXIMIZED for 100 requests/day
-# Each day trains on ~45-50 stocks = ~90-100 API requests
+# Weekly rotation of S&P 500 stocks - OPTIMIZED for NewsAPI (100 requests/day, 20 days lookback)
+# Each stock uses 20 requests (20 days of news)
+# 100 requests ÷ 20 = 5 stocks per day max
+# Using 4 stocks per day for safety buffer = 80 requests/day
 STOCK_GROUPS = {
-    "monday": [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK.B", "UNH", "XOM",
-        "JNJ", "JPM", "V", "PG", "MA", "HD", "CVX", "MRK", "ABBV", "KO",
-        "PEP", "AVGO", "COST", "WMT", "MCD", "CSCO", "ACN", "TMO", "NFLX", "ABT",
-        "CRM", "ORCL", "NKE", "INTC", "VZ", "CMCSA", "AMD", "QCOM", "PM", "LLY",
-        "ADBE", "DHR", "TXN", "NEE", "UNP", "RTX", "INTU", "HON", "CAT", "LOW"
-    ],
-    "tuesday": [
-        "BA", "GS", "SPGI", "BLK", "AXP", "SBUX", "BKNG", "GILD", "MMM", "MDLZ",
-        "ISRG", "CI", "ZTS", "REGN", "CB", "TGT", "DUK", "BMY", "SYK", "BDX",
-        "PLD", "SO", "SCHW", "MO", "USB", "CVS", "CL", "NOC", "TJX", "PNC",
-        "DE", "LRCX", "MS", "WM", "BSX", "FI", "GE", "MMC", "SHW", "ICE",
-        "EOG", "NSC", "ITW", "AON", "MCO", "CCI", "PSA", "APD", "FCX", "EMR"
-    ],
-    "wednesday": [
-        "GM", "F", "DIS", "PYPL", "UBER", "ABNB", "SHOP", "SQ", "COIN", "RBLX",
-        "HOOD", "SOFI", "PLTR", "SNOW", "NET", "DDOG", "CRWD", "ZS", "MDB", "OKTA",
-        "PANW", "FTNT", "WDAY", "NOW", "TEAM", "ZM", "DOCU", "TWLO", "ROKU", "PINS",
-        "SNAP", "SPOT", "LYFT", "DASH", "SE", "MELI", "NU", "RIVN", "LCID", "NIO",
-        "XPEV", "LI", "BABA", "JD", "PDD", "BIDU", "NTES", "TSM", "ASML", "SAP"
-    ],
-    "thursday": [
-        "UL", "DEO", "SNY", "NVO", "AZN", "GSK", "RHHBY", "NVS", "BAYRY", "TAK",
-        "ABBV", "BMY", "LLY", "MRK", "PFE", "JNJ", "AMGN", "GILD", "BIIB", "VRTX",
-        "REGN", "ILMN", "MRNA", "BNTX", "ALNY", "SGEN", "EXAS", "TECH", "INCY", "JAZZ",
-        "HCA", "UNH", "CI", "CVS", "HUM", "CNC", "ANTM", "ELV", "MOH", "THC",
-        "DGX", "LH", "IQV", "A", "CAH", "MCK", "COR", "ABC", "ZBH", "SYK"
-    ],
-    "friday": [
-        "XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "VLO", "OXY", "HAL",
-        "BKR", "PXD", "KMI", "WMB", "OKE", "LNG", "FANG", "DVN", "HES", "MRO",
-        "JPM", "BAC", "WFC", "C", "GS", "MS", "BLK", "SCHW", "USB", "PNC",
-        "TFC", "AXP", "BK", "STT", "NTRS", "KEY", "RF", "CFG", "FITB", "HBAN",
-        "COF", "DFS", "SYF", "ALLY", "MA", "V", "PYPL", "FIS", "FISV", "GPN"
-    ],
-    "saturday": [
-        "WMT", "TGT", "COST", "KR", "DG", "DLTR", "ROST", "TJX", "BBY", "HD",
-        "LOW", "DHI", "LEN", "PHM", "NVR", "TOL", "KBH", "MTH", "TMHC", "BZH",
-        "PG", "KO", "PEP", "MDLZ", "MNST", "KDP", "STZ", "TAP", "BUD", "SAM",
-        "KHC", "GIS", "K", "CPB", "CAG", "SJM", "MKC", "HSY", "CHD", "CLX",
-        "CL", "EL", "AVP", "NWL", "COTY", "TPR", "CPRI", "RL", "PVH", "HBI"
-    ],
-    "sunday": [
-        "NFLX", "DIS", "CMCSA", "CHTR", "WBD", "PARA", "FOX", "FOXA", "DISCA", "DISCB",
-        "NKE", "LULU", "UAA", "UA", "VFC", "HBI", "COLM", "CROX", "DECK", "SKX",
-        "MCD", "SBUX", "YUM", "QSR", "CMG", "DPZ", "WEN", "JACK", "PZZA", "TXRH",
-        "BA", "LMT", "RTX", "NOC", "GD", "LHX", "HII", "TXT", "SPR", "HWM",
-        "CAT", "DE", "CMI", "EMR", "ROK", "PH", "ITW", "ETN", "CARR", "OTIS"
-    ]
+    "thursday": ["AAPL", "MSFT", "GOOGL", "AMZN"],           # Mega-cap tech (Day 1)
+    "friday": ["NVDA", "META", "TSLA", "BRK.B"],            # Growth + value leaders
+    "saturday": ["UNH", "XOM", "JNJ", "JPM"],               # Healthcare + Energy + Finance
+    "sunday": ["V", "PG", "MA", "HD"],                      # Payments + Consumer staples
+    "monday": ["CVX", "MRK", "ABBV", "KO"],                 # Energy + Pharma + Beverages
+    "tuesday": ["PEP", "AVGO", "COST", "WMT"],              # Consumer + Tech + Retail
+    "wednesday": ["MCD", "CSCO", "ACN", "TMO"],             # Food + Tech + Services
+    "thursday2": ["NFLX", "ABT", "CRM", "ORCL"],            # Media + Healthcare + Software
+    "friday2": ["NKE", "INTC", "VZ", "CMCSA"],              # Apparel + Tech + Telecom
+    "saturday2": ["AMD", "QCOM", "PM", "LLY"],              # Semiconductors + Tobacco + Pharma
+    "sunday2": ["ADBE", "DHR", "TXN", "NEE"],               # Software + Industrials + Utilities
+    "monday2": ["UNP", "RTX", "INTU", "HON"],               # Rail + Aerospace + Software + Industrials
+    "tuesday2": ["CAT", "LOW", "BA", "GS"],                 # Construction + Retail + Aerospace + Banking
+    "wednesday2": ["SPGI", "BLK", "AXP", "SBUX"]            # Financial services + Coffee (Day 14)
 }
 
-# Auto-detect which day it is
-day_name = datetime.now().strftime("%A").lower()
-SP500_STOCKS = STOCK_GROUPS.get(day_name, STOCK_GROUPS["monday"])
+# Determine which day of 2-week cycle (Day 1-14)
+day_index = (datetime.now() - datetime(2025, 11, 7)).days % 14  # Starting from Nov 7
+day_names = ["thursday", "friday", "saturday", "sunday", "monday", "tuesday", "wednesday",
+             "thursday2", "friday2", "saturday2", "sunday2", "monday2", "tuesday2", "wednesday2"]
+day_key = day_names[day_index]
+SP500_STOCKS = STOCK_GROUPS[day_key]
 
 EPOCHS = 100
 CHECKPOINT_EVERY = 20
 
 print("=" * 70)
-print("🎯 MAXIMIZED WEEKLY ROTATION: 350 STOCKS ACROSS 7 DAYS")
+print("🎯 2-WEEK S&P 500 TRAINING PLAN")
 print("=" * 70)
-print(f"\n📅 Today is {day_name.capitalize()}")
-print(f"🎯 Training on: {len(SP500_STOCKS)} stocks today")
-print(f"\n📊 Maximized Training Strategy:")
-print(f"  • Week 1: Train ~50 different stocks EACH DAY (350 total)")
-print(f"  • Uses ~100 API requests/day (maxed out!)")
+print(f"\n📅 Training Day: {day_index + 1}/14")
+print(f"🎯 Today's stocks: {', '.join(SP500_STOCKS)}")
+print(f"\n📊 Optimized Strategy:")
+print(f"  • 20 days of company news per stock")
+print(f"  • 4 stocks/day × 20 requests = 80 API calls (under 100 limit)")
+print(f"  • No global sentiment (VIX captures market mood)")
+print(f"  • After 14 days: 56 S&P 500 stocks trained!")
 print(f"  • Model learns from MASSIVE diversity across all sectors")
 print(f"  • After 7 days: Model trained on 350 different stocks!")
 print(f"  • Week 2+: Switch to train_daily.py for maintenance")
