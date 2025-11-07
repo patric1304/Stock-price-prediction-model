@@ -141,7 +141,7 @@ else:
 
 # Train the model
 print(f"\n🔥 Training model for {EPOCHS} epochs...")
-print(f"   Learning patterns from {day_name.capitalize()}'s stocks")
+print(f"   Learning patterns from {day_key.capitalize()}'s stocks")  # CHANGE day_name to day_key
 print("=" * 70)
 
 criterion = torch.nn.MSELoss()
@@ -216,10 +216,10 @@ print(f"💾 Scalers saved")
 # Save training log
 log_path = logs_dir / f"training_{timestamp}.txt"
 with open(log_path, "w") as f:
-    f.write(f"Maximized Weekly Rotation Training - {day_name.capitalize()}\n")
+    f.write(f"Maximized Weekly Rotation Training - {day_key.capitalize()}\n")  # CHANGE day_name to day_key
     f.write("=" * 70 + "\n")
     f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-    f.write(f"Day of Week: {day_name.capitalize()}\n\n")
+    f.write(f"Day of Week: {day_key.capitalize()}\n\n")  # CHANGE day_name to day_key
     f.write(f"Training Strategy:\n")
     f.write(f"  - Week 1: Train ~50 stocks each day (350 total)\n")
     f.write(f"  - Model learns incrementally from previous days\n")
@@ -249,7 +249,7 @@ print("\n" + "=" * 70)
 print("✅ TRAINING COMPLETE!")
 print("=" * 70)
 print(f"\n📊 Progress:")
-print(f"  • Today: Trained on {len(successful_stocks)} stocks ({day_name.capitalize()})")
+print(f"  • Today: Trained on {len(successful_stocks)} stocks ({day_key.capitalize()})")  # CHANGE day_name to day_key
 print(f"  • Strategy: Run this script daily for 7 days")
 print(f"  • After Week 1: 350 stocks trained - MAXIMUM DIVERSITY!")
 print(f"  • Week 2+: Switch to 'python scripts/train_daily.py'")
