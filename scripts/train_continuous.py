@@ -41,8 +41,9 @@ day_names = ["thursday", "friday", "saturday", "sunday", "monday", "tuesday", "w
 day_key = day_names[day_index]
 SP500_STOCKS = STOCK_GROUPS[day_key]
 
-EPOCHS = 100
-CHECKPOINT_EVERY = 20
+EPOCHS = 500  # Reasonable epochs to avoid overfitting
+BATCH_SIZE = 32  # Mini-batch training
+CHECKPOINT_EVERY = 100
 
 print(f"Day {day_index + 1}/14: {', '.join(SP500_STOCKS)}")
 
@@ -127,41 +128,61 @@ existing_models = sorted(models_dir.glob("sp500_model_*.pth"))
 X_scaled, y_scaled, scaler_X, scaler_y = scale_features(X_combined, y_combined)
 input_dim = X_scaled.shape[1]
 
+# Always create new model with current architecture
+model = StockPredictor(input_dim)
+
 if existing_models:
-    print(f"Loading model: {existing_models[-1].name}")
+    print(f"Found previous model: {existing_models[-1].name}")
     try:
-        model = torch.load(existing_models[-1], weights_only=False)
-        print(f"✓ Loaded! Continuing training from previous days")
+        # Try to load state dict if architectures match
+        old_model = torch.load(existing_models[-1], weights_only=False)
+        if hasattr(old_model, 'network'):  # New architecture
+            model.load_state_dict(old_model.state_dict())
+            print(f"✓ Loaded! Continuing training from previous days")
+        else:  # Old architecture - start fresh
+            print(f"Old architecture detected, starting fresh with new model")
     except Exception as e:
         print(f"Could not load ({str(e)[:50]}), starting fresh")
-        model = StockPredictor(input_dim)
 else:
     print("Starting fresh (Day 1)")
-    model = StockPredictor(input_dim)
 
 # Train the model
-print(f"Training {EPOCHS} epochs...")
+print(f"Training {EPOCHS} epochs with mini-batches (30-40 minutes)...")
+import time
+start_time = time.time()
 
 criterion = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 X_tensor = torch.tensor(X_scaled, dtype=torch.float32)
-y_tensor = torch.tensor(y_scaled, dtype=torch.float32).reshape(-1, 1)  # Proper 2D shape
+y_tensor = torch.tensor(y_scaled, dtype=torch.float32).reshape(-1, 1)
+
+# Create DataLoader for mini-batch training
+from torch.utils.data import TensorDataset, DataLoader
+dataset = TensorDataset(X_tensor, y_tensor)
+dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 training_losses = []
 
 for epoch in range(EPOCHS):
     model.train()
-    optimizer.zero_grad()
-    outputs = model(X_tensor)
-    loss = criterion(outputs, y_tensor)
-    loss.backward()
-    optimizer.step()
+    epoch_loss = 0.0
     
-    training_losses.append(loss.item())
+    # Mini-batch training
+    for batch_X, batch_y in dataloader:
+        optimizer.zero_grad()
+        outputs = model(batch_X)
+        loss = criterion(outputs, batch_y)
+        loss.backward()
+        optimizer.step()
+        epoch_loss += loss.item()
     
-    if (epoch + 1) % 20 == 0:
-        print(f"  Epoch {epoch+1}/{EPOCHS}: {loss.item():.4f}")
+    avg_loss = epoch_loss / len(dataloader)
+    training_losses.append(avg_loss)
+    
+    if (epoch + 1) % 50 == 0:
+        elapsed = time.time() - start_time
+        print(f"  Epoch {epoch+1}/{EPOCHS}: Loss {avg_loss:.4f} | Time: {elapsed/60:.1f}min")
     
     if (epoch + 1) % CHECKPOINT_EVERY == 0:
         checkpoint_path = checkpoints_dir / f"checkpoint_epoch_{epoch+1}.pth"
@@ -171,6 +192,7 @@ for epoch in range(EPOCHS):
             'loss': loss.item(),
         }, checkpoint_path)
 
+total_time = time.time() - start_time
 
 # Calculate final accuracy
 model.eval()
@@ -189,7 +211,8 @@ with torch.no_grad():
     mape = np.abs((predictions_actual - y_actual) / y_actual).mean() * 100
     rmse = np.sqrt(np.mean((predictions_actual - y_actual) ** 2))
     
-    print(f"\nMAE: ${mae:.2f} | MAPE: {mape:.1f}% | RMSE: ${rmse:.2f}")
+    print(f"\nTraining time: {total_time/60:.1f} minutes")
+    print(f"MAE: ${mae:.2f} | MAPE: {mape:.1f}% | RMSE: ${rmse:.2f}")
 
 # Save final model
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
