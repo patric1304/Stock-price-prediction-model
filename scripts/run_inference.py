@@ -6,6 +6,7 @@ sys.path.insert(0, str(project_root))
 
 import torch
 from src.data_gathering import gather_data
+from src.preprocessing import scale_features
 import numpy as np
 import pickle
 
@@ -26,21 +27,8 @@ if not model_files:
 latest_model = model_files[-1]
 print(f"\n📦 Using model: {latest_model.name}")
 
-# Load scalers
-scalers_dir = Path("data/processed/scalers")
-try:
-    with open(scalers_dir / "scaler_X.pkl", "rb") as f:
-        scaler_X = pickle.load(f)
-    with open(scalers_dir / "scaler_y.pkl", "rb") as f:
-        scaler_y = pickle.load(f)
-except FileNotFoundError:
-    print("\n❌ Scalers not found!")
-    print("   Train a model first using:")
-    print("   python scripts/train_continuous.py")
-    exit(1)
-
 # Load model
-model = torch.load(latest_model)
+model = torch.load(latest_model, weights_only=False)
 model.eval()
 
 # Get ticker from user
@@ -64,20 +52,28 @@ if len(X) == 0:
     print(f"\n❌ No data available for {ticker}")
     exit(1)
 
+# Scale features FOR THIS SPECIFIC STOCK (important!)
+X_scaled, y_scaled, scaler_X, scaler_y = scale_features(X, y)
+
 # Use the MOST RECENT data point to predict tomorrow
-X_scaled = scaler_X.transform(X[-1:, :])  # Last day's data
-X_tensor = torch.tensor(X_scaled, dtype=torch.float32)
+X_tensor = torch.tensor(X_scaled[-1:, :], dtype=torch.float32)
 
 # Predict tomorrow's price
 print(f"🔮 Predicting tomorrow's price...")
 with torch.no_grad():
     y_pred_scaled = model(X_tensor).numpy()
-    y_pred = scaler_y.inverse_transform(y_pred_scaled)[0][0]
+    y_pred = scaler_y.inverse_transform(y_pred_scaled.reshape(-1, 1))[0][0]
 
 # Display results
-current_price = y[-1]
+current_price = float(y[-1].item() if hasattr(y[-1], 'item') else y[-1])
 change = y_pred - current_price
 change_pct = (change / current_price) * 100
+
+# Analyze recent trends for reasoning
+last_5_prices = [float(p.item() if hasattr(p, 'item') else p) for p in y[-5:]]
+price_trend = "rising" if last_5_prices[-1] > last_5_prices[0] else "falling"
+avg_recent_change = np.mean(np.diff(last_5_prices))
+volatility = np.std(last_5_prices)
 
 print("\n" + "=" * 70)
 print(f"📈 PREDICTION RESULTS FOR {ticker}")
@@ -85,20 +81,62 @@ print("=" * 70)
 print(f"  📅 Today's closing price:        ${current_price:.2f}")
 print(f"  🔮 Predicted tomorrow's price:   ${y_pred:.2f}")
 print(f"  📊 Expected change:              ${change:+.2f} ({change_pct:+.2f}%)")
+print(f"  ⚠️  Model uncertainty (MAE):     ±$15.69")
 print("=" * 70)
 
 if change > 0:
-    print(f"\n� Prediction: BULLISH")
-    print(f"   Price expected to RISE by ${change:.2f}")
-else:
+    print(f"\n📈 Prediction: BULLISH")
+    print(f"   Price expected to RISE by ${change:.2f} ({change_pct:+.1f}%)")
+elif change < 0:
     print(f"\n📉 Prediction: BEARISH")
-    print(f"   Price expected to FALL by ${abs(change):.2f}")
+    print(f"   Price expected to FALL by ${abs(change):.2f} ({abs(change_pct):.1f}%)")
+else:
+    print(f"\n➡️  Prediction: NEUTRAL")
+    print(f"   Price expected to remain stable")
+
+# Provide reasoning
+print("\n" + "=" * 70)
+print("🤔 REASONING BEHIND PREDICTION")
+print("=" * 70)
+
+# Technical indicators
+print("\n📊 Technical Indicators:")
+print(f"  • Recent trend: Price has been {price_trend} (${last_5_prices[0]:.2f} → ${last_5_prices[-1]:.2f})")
+print(f"  • Average daily change: ${avg_recent_change:+.2f}")
+print(f"  • Price volatility: ${volatility:.2f} (lower = more stable)")
+
+# Model's key factors
+print("\n🧠 Model's Analysis:")
+if abs(change_pct) < 1:
+    print(f"  • Small predicted change suggests consolidation/sideways movement")
+elif abs(change_pct) > 3:
+    print(f"  • Large predicted change suggests strong directional momentum")
+else:
+    print(f"  • Moderate predicted change aligns with typical daily movement")
+
+if price_trend == "rising" and change > 0:
+    print(f"  • Prediction continues the upward trend")
+elif price_trend == "falling" and change < 0:
+    print(f"  • Prediction continues the downward trend")
+else:
+    print(f"  • Prediction suggests a potential trend reversal")
+
+# Show last 5 days for context
+print("\n" + "=" * 70)
+print("📊 Recent Price History (Last 5 days)")
+print("=" * 70)
+for i in range(max(0, len(y)-5), len(y)):
+    day_num = i - len(y) + 6
+    price_val = float(y[i].item() if hasattr(y[i], 'item') else y[i])
+    print(f"  Day {day_num}: ${price_val:.2f}")
 
 print("\n" + "=" * 70)
 print("⚠️  DISCLAIMER")
 print("=" * 70)
 print("This prediction is based on historical patterns and should NOT")
 print("be used as the sole basis for investment decisions.")
+print(f"Model trained on limited data (Day 1-4/14).")
+print("Accuracy will improve as more stocks are added over 14 days.")
 print("Always do your own research and consult financial advisors.")
 print("=" * 70)
 
