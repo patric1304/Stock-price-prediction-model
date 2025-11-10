@@ -46,12 +46,41 @@ CHECKPOINT_EVERY = 20
 
 print(f"Day {day_index + 1}/14: {', '.join(SP500_STOCKS)}")
 
-all_X = []
-all_y = []
+# Prepare directories
+models_dir = Path("data/processed/models")
+checkpoints_dir = Path("data/checkpoints")
+logs_dir = Path("data/processed/training_logs")
+scalers_dir = Path("data/processed/scalers")
+data_archive_dir = Path("data/processed/training_data")
+for d in [models_dir, checkpoints_dir, logs_dir, scalers_dir, data_archive_dir]:
+    d.mkdir(parents=True, exist_ok=True)
+
+# Load previously accumulated data (if any)
+accumulated_data_path = data_archive_dir / "accumulated_training_data.pkl"
+if accumulated_data_path.exists():
+    print("Loading previous training data...")
+    with open(accumulated_data_path, "rb") as f:
+        saved_data = pickle.load(f)
+        all_X = saved_data['X']
+        all_y = saved_data['y']
+        all_stocks = saved_data['stocks']
+    print(f"✓ Loaded {len(all_stocks)} stocks from previous days")
+else:
+    print("Starting fresh - no previous data")
+    all_X = []
+    all_y = []
+    all_stocks = []
+
+# Gather today's new stocks
 successful_stocks = []
 failed_stocks = []
 
 for i, ticker in enumerate(SP500_STOCKS, 1):
+    # Skip if already trained
+    if ticker in all_stocks:
+        print(f"  [{i}/{len(SP500_STOCKS)}] {ticker}... already trained, skipping")
+        continue
+        
     try:
         print(f"  [{i}/{len(SP500_STOCKS)}] {ticker}...", end=" ", flush=True)
         
@@ -64,6 +93,7 @@ for i, ticker in enumerate(SP500_STOCKS, 1):
         
         all_X.append(X)
         all_y.append(y)
+        all_stocks.append(ticker)
         successful_stocks.append(ticker)
         print(f"✓ {len(X)} samples")
         
@@ -72,22 +102,25 @@ for i, ticker in enumerate(SP500_STOCKS, 1):
         failed_stocks.append(ticker)
 
 if not all_X:
-    print("No data collected!")
+    print("No data to train on!")
     exit(1)
 
-# Combine all data
+# Combine all accumulated data
 X_combined = np.vstack(all_X)
 y_combined = np.concatenate(all_y)
 
-print(f"\nTraining: {len(successful_stocks)} stocks, {len(X_combined)} samples, {X_combined.shape[1]} features")
+# Save accumulated data for next run
+with open(accumulated_data_path, "wb") as f:
+    pickle.dump({
+        'X': all_X,
+        'y': all_y,
+        'stocks': all_stocks
+    }, f)
+print(f"✓ Saved accumulated data: {len(all_stocks)} total stocks")
 
-# Prepare directories
-models_dir = Path("data/processed/models")
-checkpoints_dir = Path("data/checkpoints")
-logs_dir = Path("data/processed/training_logs")
-scalers_dir = Path("data/processed/scalers")
-for d in [models_dir, checkpoints_dir, logs_dir, scalers_dir]:
-    d.mkdir(parents=True, exist_ok=True)
+print(f"\nTraining: {len(all_stocks)} total stocks, {len(X_combined)} samples, {X_combined.shape[1]} features")
+if successful_stocks:
+    print(f"New today: {', '.join(successful_stocks)}")
 
 # Load existing model if available (incremental training across days)
 existing_models = sorted(models_dir.glob("sp500_model_*.pth"))
@@ -97,9 +130,10 @@ input_dim = X_scaled.shape[1]
 if existing_models:
     print(f"Loading model: {existing_models[-1].name}")
     try:
-        model = torch.load(existing_models[-1])
+        model = torch.load(existing_models[-1], weights_only=False)
+        print(f"✓ Loaded! Continuing training from previous days")
     except Exception as e:
-        print(f"Could not load, starting fresh")
+        print(f"Could not load ({str(e)[:50]}), starting fresh")
         model = StockPredictor(input_dim)
 else:
     print("Starting fresh (Day 1)")
@@ -176,8 +210,10 @@ log_path = logs_dir / f"training_{timestamp}.txt"
 with open(log_path, "w") as f:
     f.write(f"Day {day_index + 1}/14 - {day_key.capitalize()}\n")
     f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-    f.write(f"Stocks: {', '.join(successful_stocks)}\n")
-    f.write(f"Samples: {len(X_combined):,}\n")
+    f.write(f"Total stocks trained: {len(all_stocks)}\n")
+    f.write(f"New stocks today: {', '.join(successful_stocks) if successful_stocks else 'None (all already trained)'}\n")
+    f.write(f"All stocks: {', '.join(all_stocks)}\n\n")
+    f.write(f"Total samples: {len(X_combined):,}\n")
     f.write(f"Features: {X_combined.shape[1]}\n\n")
     f.write(f"Epochs: {EPOCHS}\n")
     f.write(f"Final Loss: {final_loss:.6f}\n\n")
@@ -188,4 +224,4 @@ with open(log_path, "w") as f:
     if failed_stocks:
         f.write(f"\nFailed: {', '.join(failed_stocks)}\n")
 
-print(f"Done! Day {day_index + 1}/14 complete")
+print(f"Done! Day {day_index + 1}/14 complete - Total: {len(all_stocks)} stocks")

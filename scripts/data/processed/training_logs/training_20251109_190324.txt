@@ -1,0 +1,15 @@
+Day 3/14 - Saturday
+Date: 2025-11-09 19:03:24
+
+Stocks: UNH, XOM, JNJ, JPM
+Samples: 148
+Features: 31
+
+Epochs: 100
+Final Loss: 0.018574
+
+MAE: $9.53
+MAPE: 5.06%
+RMSE: $12.91
+
+Model: sp500_model_20251109_190324.pth

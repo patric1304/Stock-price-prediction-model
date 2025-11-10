@@ -1,0 +1,15 @@
+Day 4/14 - Sunday
+Date: 2025-11-10 16:42:26
+
+Stocks: V, PG, MA, HD
+Samples: 148
+Features: 31
+
+Epochs: 100
+Final Loss: 0.022118
+
+MAE: $17.38
+MAPE: 6.24%
+RMSE: $22.01
+
+Model: sp500_model_20251110_164226.pth
