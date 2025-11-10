@@ -75,6 +75,11 @@ price_trend = "rising" if last_5_prices[-1] > last_5_prices[0] else "falling"
 avg_recent_change = np.mean(np.diff(last_5_prices))
 volatility = np.std(last_5_prices)
 
+# Extract news sentiment from the most recent data point
+# Features are: [price_history(25), sentiment_comp(1), sentiment_global(1), macro(3), vix(1)]
+last_features = X[-1]
+news_sentiment = float(last_features[25]) if len(last_features) > 25 else 0.0  # sentiment_comp is at index 25
+
 print("\n" + "=" * 70)
 print(f"📈 PREDICTION RESULTS FOR {ticker}")
 print("=" * 70)
@@ -104,6 +109,18 @@ print("\n📊 Technical Indicators:")
 print(f"  • Recent trend: Price has been {price_trend} (${last_5_prices[0]:.2f} → ${last_5_prices[-1]:.2f})")
 print(f"  • Average daily change: ${avg_recent_change:+.2f}")
 print(f"  • Price volatility: ${volatility:.2f} (lower = more stable)")
+
+# News sentiment
+print("\n📰 News Sentiment Analysis:")
+if news_sentiment > 0.1:
+    print(f"  • Company news: POSITIVE (score: {news_sentiment:.2f})")
+    print(f"    Recent headlines suggest optimistic sentiment")
+elif news_sentiment < -0.1:
+    print(f"  • Company news: NEGATIVE (score: {news_sentiment:.2f})")
+    print(f"    Recent headlines suggest concerning sentiment")
+else:
+    print(f"  • Company news: NEUTRAL (score: {news_sentiment:.2f})")
+    print(f"    Recent headlines are mixed or neutral")
 
 # Model's key factors
 print("\n🧠 Model's Analysis:")
