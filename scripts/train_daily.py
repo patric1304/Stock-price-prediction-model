@@ -89,7 +89,7 @@ criterion = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 X_tensor = torch.tensor(X_scaled, dtype=torch.float32)
-y_tensor = torch.tensor(y_scaled, dtype=torch.float32).unsqueeze(1)
+y_tensor = torch.tensor(y_scaled, dtype=torch.float32).reshape(-1, 1)  # Fix: use reshape instead of unsqueeze
 
 for epoch in range(EPOCHS):
     model.train()
@@ -108,8 +108,12 @@ with torch.no_grad():
     predictions = model(X_tensor)
     final_loss = criterion(predictions, y_tensor).item()
     
-    predictions_actual = scaler_y.inverse_transform(predictions.numpy())
-    y_actual = scaler_y.inverse_transform(y_tensor.numpy())
+    # Fix: reshape to 2D before inverse_transform
+    predictions_2d = predictions.numpy().reshape(-1, 1)
+    y_2d = y_tensor.numpy().reshape(-1, 1)
+    
+    predictions_actual = scaler_y.inverse_transform(predictions_2d)
+    y_actual = scaler_y.inverse_transform(y_2d)
     
     mae = np.abs(predictions_actual - y_actual).mean()
     mape = np.abs((predictions_actual - y_actual) / y_actual).mean() * 100
