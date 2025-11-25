@@ -4,32 +4,45 @@ Preview what stocks will be trained on different days
 from datetime import datetime, timedelta
 
 STOCK_GROUPS = {
-    "thursday": ["AAPL", "MSFT", "GOOGL", "AMZN"],
-    "friday": ["NVDA", "META", "TSLA", "BRK.B"],
-    "saturday": ["UNH", "XOM", "JNJ", "JPM"],
-    "sunday": ["V", "PG", "MA", "HD"],
-    "monday": ["CVX", "MRK", "ABBV", "KO"],
-    "tuesday": ["PEP", "AVGO", "COST", "WMT"],
-    "wednesday": ["MCD", "CSCO", "ACN", "TMO"],
-    "thursday2": ["NFLX", "ABT", "CRM", "ORCL"],
-    "friday2": ["NKE", "INTC", "VZ", "CMCSA"],
-    "saturday2": ["AMD", "QCOM", "PM", "LLY"],
-    "sunday2": ["ADBE", "DHR", "TXN", "NEE"],
-    "monday2": ["UNP", "RTX", "INTU", "HON"],
-    "tuesday2": ["CAT", "LOW", "BA", "GS"],
-    "wednesday2": ["SPGI", "BLK", "AXP", "SBUX"]
+    # Week 1
+    "thursday": ["NVDA", "AMD", "INTC", "MU"],
+    "friday": ["JPM", "BAC", "WFC", "C"],
+    "saturday": ["JNJ", "PFE", "MRK", "ABBV"],
+    "sunday": ["KO", "PEP", "MCD", "SBUX"],
+    "monday": ["XOM", "CVX", "COP", "SLB"],
+    "tuesday": ["WMT", "TGT", "COST", "HD"],
+    "wednesday": ["UNH", "ELV", "CVS", "CI"],
+    # Week 2
+    "thursday2": ["AAPL", "MSFT", "GOOGL", "AMZN"],
+    "friday2": ["TSLA", "F", "GM", "TM"],
+    "saturday2": ["DIS", "NFLX", "CMCSA", "WBD"],
+    "sunday2": ["V", "MA", "AXP", "PYPL"],
+    "monday2": ["BA", "LMT", "RTX", "GD"],
+    "tuesday2": ["CAT", "DE", "HON", "GE"],
+    "wednesday2": ["NEE", "DUK", "SO", "D"],
+    # Week 3
+    "thursday3": ["META", "SNAP", "PINS", "TTD"],
+    "friday3": ["CRM", "ADBE", "ORCL", "SAP"],
+    "saturday3": ["NKE", "LULU", "ADDYY", "UAA"],
+    "sunday3": ["BKNG", "EXPE", "ABNB", "MAR"],
+    "monday3": ["UPS", "FDX", "DAL", "UAL"],
+    "tuesday3": ["GS", "MS", "BLK", "SCHW"],
+    "wednesday3": ["IBM", "CSCO", "HPE", "DELL"]
 }
 
-day_names = ["thursday", "friday", "saturday", "sunday", "monday", "tuesday", "wednesday",
-             "thursday2", "friday2", "saturday2", "sunday2", "monday2", "tuesday2", "wednesday2"]
+day_names = [
+    "thursday", "friday", "saturday", "sunday", "monday", "tuesday", "wednesday",
+    "thursday2", "friday2", "saturday2", "sunday2", "monday2", "tuesday2", "wednesday2",
+    "thursday3", "friday3", "saturday3", "sunday3", "monday3", "tuesday3", "wednesday3"
+]
 
-print("🗓️  14-DAY TRAINING SCHEDULE")
+print("🗓️  21-DAY TRAINING SCHEDULE")
 print("=" * 70)
 
-start_date = datetime(2025, 11, 7)
+start_date = datetime(2025, 11, 21)
 total_stocks = 0
 
-for i in range(14):
+for i in range(21):
     current_date = start_date + timedelta(days=i)
     day_key = day_names[i]
     stocks = STOCK_GROUPS[day_key]
@@ -45,5 +58,5 @@ for i in range(14):
         print(f"  Samples: ~{total_stocks * 37} ({total_stocks} stocks × 37 days)")
 
 print("\n" + "=" * 70)
-print(f"TOTAL: {total_stocks} stocks after 14 days")
+print(f"TOTAL: {total_stocks} stocks after 21 days")
 print(f"Expected final samples: ~{total_stocks * 37}")

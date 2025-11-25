@@ -1,0 +1,18 @@
+Day 12/14 - Monday2
+Date: 2025-11-18 10:45:13
+
+Total stocks trained: 28
+New stocks today: UNP, RTX, INTU, HON
+All stocks: CVX, MRK, ABBV, KO, PEP, AVGO, COST, WMT, MCD, CSCO, ACN, TMO, NFLX, ABT, CRM, ORCL, AMD, QCOM, PM, LLY, ADBE, DHR, TXN, NEE, UNP, RTX, INTU, HON
+
+Total samples: 1,036
+Features: 31
+
+Epochs: 500
+Final Loss: 0.006036
+
+MAE: $11.91
+MAPE: 5.58%
+RMSE: $21.24
+
+Model: sp500_model_20251118_104513.pth

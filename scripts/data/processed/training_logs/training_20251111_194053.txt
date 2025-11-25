@@ -1,0 +1,18 @@
+Day 5/14 - Monday
+Date: 2025-11-11 19:40:53
+
+Total stocks trained: 4
+New stocks today: CVX, MRK, ABBV, KO
+All stocks: CVX, MRK, ABBV, KO
+
+Total samples: 148
+Features: 31
+
+Epochs: 500
+Final Loss: 0.026279
+
+MAE: $8.30
+MAPE: 7.21%
+RMSE: $10.16
+
+Model: sp500_model_20251111_194053.pth

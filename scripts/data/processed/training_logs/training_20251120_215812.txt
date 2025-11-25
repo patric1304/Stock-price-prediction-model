@@ -1,0 +1,18 @@
+Day 14/14 - Wednesday2
+Date: 2025-11-20 21:58:12
+
+Total stocks trained: 32
+New stocks today: SPGI, BLK, AXP, SBUX
+All stocks: CVX, MRK, ABBV, KO, PEP, AVGO, COST, WMT, MCD, CSCO, ACN, TMO, NFLX, ABT, CRM, ORCL, AMD, QCOM, PM, LLY, ADBE, DHR, TXN, NEE, UNP, RTX, INTU, HON, SPGI, BLK, AXP, SBUX
+
+Total samples: 1,188
+Features: 31
+
+Epochs: 500
+Final Loss: 0.005743
+
+MAE: $13.43
+MAPE: 5.77%
+RMSE: $22.51
+
+Model: sp500_model_20251120_215812.pth
