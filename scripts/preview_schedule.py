@@ -5,29 +5,29 @@ from datetime import datetime, timedelta
 
 STOCK_GROUPS = {
     # Week 1
-    "thursday": ["NVDA", "AMD", "INTC", "MU"],
-    "friday": ["JPM", "BAC", "WFC", "C"],
-    "saturday": ["JNJ", "PFE", "MRK", "ABBV"],
-    "sunday": ["KO", "PEP", "MCD", "SBUX"],
-    "monday": ["XOM", "CVX", "COP", "SLB"],
-    "tuesday": ["WMT", "TGT", "COST", "HD"],
-    "wednesday": ["UNH", "ELV", "CVS", "CI"],
+    "thursday": ["ROP", "RSG", "RTX", "RVTY"],
+    "friday": ["SBAC", "SBUX", "SCHW", "SEE"],
+    "saturday": ["SHW", "SJM", "SLB", "SNA"],
+    "sunday": ["SO", "SPG", "SPGI", "SRE"],
+    "monday": ["STE", "STZ", "SWK", "SWKS"],
+    "tuesday": ["SYF", "SYK", "SYY", "T"],
+    "wednesday": ["TAP", "TDY", "TECH", "TEL"],
     # Week 2
-    "thursday2": ["AAPL", "MSFT", "GOOGL", "AMZN"],
-    "friday2": ["TSLA", "F", "GM", "TM"],
-    "saturday2": ["DIS", "NFLX", "CMCSA", "WBD"],
-    "sunday2": ["V", "MA", "AXP", "PYPL"],
-    "monday2": ["BA", "LMT", "RTX", "GD"],
-    "tuesday2": ["CAT", "DE", "HON", "GE"],
-    "wednesday2": ["NEE", "DUK", "SO", "D"],
+    "thursday2": ["TER", "TFC", "TFX", "TGT"],
+    "friday2": ["TJX", "TMUS", "TPR", "TRGP"],
+    "saturday2": ["TRMB", "TROW", "TRV", "TSLA"],
+    "sunday2": ["TSN", "TT", "TTWO", "TXN"],
+    "monday2": ["TXT", "TYL", "UDR", "UL"],
+    "tuesday2": ["UMPQ", "UNH", "UNP", "UPS"],
+    "wednesday2": ["URI", "USB", "VEV", "VFC"],
     # Week 3
-    "thursday3": ["META", "SNAP", "PINS", "TTD"],
-    "friday3": ["CRM", "ADBE", "ORCL", "SAP"],
-    "saturday3": ["NKE", "LULU", "ADDYY", "UAA"],
-    "sunday3": ["BKNG", "EXPE", "ABNB", "MAR"],
-    "monday3": ["UPS", "FDX", "DAL", "UAL"],
-    "tuesday3": ["GS", "MS", "BLK", "SCHW"],
-    "wednesday3": ["IBM", "CSCO", "HPE", "DELL"]
+    "thursday3": ["VLO", "VMC", "VRSK", "VRSN"],
+    "friday3": ["VRTX", "VTR", "VZ", "WBA"],
+    "saturday3": ["WBD", "WEC", "WELL", "WFC"],
+    "sunday3": ["WHR", "WM", "WMB", "WMT"],
+    "monday3": ["WRB", "WRK", "WST", "WY"],
+    "tuesday3": ["WYNN", "XEL", "XOM", "XRAY"],
+    "wednesday3": ["ZBH", "ZBRA", "ZION", "ZTS"]
 }
 
 day_names = [

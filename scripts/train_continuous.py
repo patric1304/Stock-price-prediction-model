@@ -18,20 +18,20 @@ import pickle
 # 100 requests ÷ 20 = 5 stocks per day max
 # Using 4 stocks per day for safety buffer = 80 requests/day
 STOCK_GROUPS = {
-    "thursday": ["AAPL", "MSFT", "GOOGL", "AMZN"],           # Mega-cap tech (Day 1)
-    "friday": ["NVDA", "META", "TSLA", "BRK.B"],            # Growth + value leaders
-    "saturday": ["UNH", "XOM", "JNJ", "JPM"],               # Healthcare + Energy + Finance
-    "sunday": ["V", "PG", "MA", "HD"],                      # Payments + Consumer staples
-    "monday": ["CVX", "MRK", "ABBV", "KO"],                 # Energy + Pharma + Beverages
-    "tuesday": ["PEP", "AVGO", "COST", "WMT"],              # Consumer + Tech + Retail
-    "wednesday": ["MCD", "CSCO", "ACN", "TMO"],             # Food + Tech + Services
-    "thursday2": ["NFLX", "ABT", "CRM", "ORCL"],            # Media + Healthcare + Software
-    "friday2": ["NKE", "INTC", "VZ", "CMCSA"],              # Apparel + Tech + Telecom
-    "saturday2": ["AMD", "QCOM", "PM", "LLY"],              # Semiconductors + Tobacco + Pharma
-    "sunday2": ["ADBE", "DHR", "TXN", "NEE"],               # Software + Industrials + Utilities
-    "monday2": ["UNP", "RTX", "INTU", "HON"],               # Rail + Aerospace + Software + Industrials
-    "tuesday2": ["CAT", "LOW", "BA", "GS"],                 # Construction + Retail + Aerospace + Banking
-    "wednesday2": ["SPGI", "BLK", "AXP", "SBUX"]            # Financial services + Coffee (Day 14)
+    "thursday": ["ROP", "RSG", "RTX", "RVTY"],
+    "friday": ["SBAC", "SBUX", "SCHW", "SEE"],
+    "saturday": ["SHW", "SJM", "SLB", "SNA"],
+    "sunday": ["SO", "SPG", "SPGI", "SRE"],
+    "monday": ["STE", "STZ", "SWK", "SWKS"],
+    "tuesday": ["SYF", "SYK", "SYY", "T"],
+    "wednesday": ["TAP", "TDY", "TECH", "TEL"],
+    "thursday2": ["TER", "TFC", "TFX", "TGT"],
+    "friday2": ["TJX", "TMUS", "TPR", "TRGP"],
+    "saturday2": ["TRMB", "TROW", "TRV", "TSLA"],
+    "sunday2": ["TSN", "TT", "TTWO", "TXN"],
+    "monday2": ["TXT", "TYL", "UDR", "UL"],
+    "tuesday2": ["UMPQ", "UNH", "UNP", "UPS"],
+    "wednesday2": ["URI", "USB", "VEV", "VFC"]
 }
 
 # Determine which day of 2-week cycle (Day 1-14)
