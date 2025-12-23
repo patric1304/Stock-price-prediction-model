@@ -23,7 +23,7 @@ print("  • Only fetches today's news (1-2 new requests per stock)")
 print("  • Best for daily incremental updates\n")
 
 # Minimal stock list for daily updates (saves API requests)
-TICKERS = ["AAPL", "TSLA", "GOOGL"]  # 3 major stocks
+TICKERS = ["ZTS", "ZION", "ZBRA"]  # 3 major stocks
 EPOCHS = 50  # Faster training for daily updates
 
 print(f"🎯 Training on: {', '.join(TICKERS)}")

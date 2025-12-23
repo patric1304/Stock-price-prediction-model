@@ -1,0 +1,18 @@
+Day 11/14 - Sunday2
+Date: 2025-12-01 22:26:19
+
+Total stocks trained: 47
+New stocks today: TSN, TT, TTWO
+All stocks: CVX, MRK, ABBV, KO, PEP, AVGO, COST, WMT, MCD, CSCO, ACN, TMO, NFLX, ABT, CRM, ORCL, AMD, QCOM, PM, LLY, ADBE, DHR, TXN, NEE, UNP, RTX, INTU, HON, SPGI, BLK, AXP, SBUX, V, PG, MA, HD, SYF, SYK, SYY, T, TER, TFC, TFX, TGT, TSN, TT, TTWO
+
+Total samples: 1,733
+Features: 31
+
+Epochs: 500
+Final Loss: 0.003682
+
+MAE: $11.04
+MAPE: 7.78%
+RMSE: $16.28
+
+Model: sp500_model_20251201_222619.pth

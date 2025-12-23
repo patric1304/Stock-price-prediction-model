@@ -1,0 +1,18 @@
+Day 6/14 - Tuesday
+Date: 2025-11-26 22:29:16
+
+Total stocks trained: 40
+New stocks today: SYF, SYK, SYY, T
+All stocks: CVX, MRK, ABBV, KO, PEP, AVGO, COST, WMT, MCD, CSCO, ACN, TMO, NFLX, ABT, CRM, ORCL, AMD, QCOM, PM, LLY, ADBE, DHR, TXN, NEE, UNP, RTX, INTU, HON, SPGI, BLK, AXP, SBUX, V, PG, MA, HD, SYF, SYK, SYY, T
+
+Total samples: 1,480
+Features: 31
+
+Epochs: 500
+Final Loss: 0.004011
+
+MAE: $10.90
+MAPE: 5.78%
+RMSE: $17.72
+
+Model: sp500_model_20251126_222915.pth
