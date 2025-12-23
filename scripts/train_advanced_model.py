@@ -20,7 +20,7 @@ def main():
     
     # Data arguments
     parser.add_argument('--ticker', type=str, default='AAPL', help='Stock ticker symbol')
-    parser.add_argument('--days', type=int, default=200, help='Days of historical data to gather')
+    parser.add_argument('--days', type=int, default=1825, help='Days of historical data to gather (default: 1825 = 5 years)')
     
     # Model arguments
     parser.add_argument('--hidden-dim', type=int, default=256, help='Hidden dimension size')

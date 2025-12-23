@@ -68,15 +68,27 @@ def train_stock(ticker, force=False, skip_existing=False, **kwargs):
     if 'learning_rate' in kwargs and kwargs['learning_rate']:
         args.extend(['--learning-rate', str(kwargs['learning_rate'])])
     
-    # Call training
+    # Call training by modifying sys.argv
     print(f"\n[TRAINING] Starting training for {ticker}...")
+    
+    # Save original sys.argv
+    original_argv = sys.argv.copy()
+    
     try:
-        train_main(args)
+        # Set new sys.argv for the training script
+        sys.argv = ['train_advanced_model.py'] + args
+        
+        # Call training
+        train_main()
+        
         print(f"[SUCCESS] Training completed for {ticker}\n")
         return True
     except Exception as e:
         print(f"[ERROR] Training failed for {ticker}: {str(e)}\n")
         return False
+    finally:
+        # Always restore original sys.argv
+        sys.argv = original_argv
 
 
 def train_from_list(stocks_file='config/stocks_to_train.txt', skip_existing=True, **kwargs):

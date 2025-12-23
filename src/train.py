@@ -172,9 +172,9 @@ def train_model_advanced(
         weight_decay=1e-5  # L2 regularization
     )
     
-    # Learning rate scheduler
+    # Learning rate scheduler (verbose removed - not supported in all PyTorch versions)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=5, verbose=verbose
+        optimizer, mode='min', factor=0.5, patience=5
     )
     
     # Early stopping
