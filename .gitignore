@@ -24,17 +24,33 @@ ENV/
 
 # Jupyter Notebook
 .ipynb_checkpoints/
-*.ipynb
 
 # Data files (cached data, models, raw data)
-data/raw/
+data/raw/news_cache/
 data/processed/
+data/checkpoints/*.pth
+data/checkpoints/*.pkl
 *.csv
-*.json
-*.pkl
+*.h5
+
+# Keep structure but ignore contents
+!data/checkpoints/.gitkeep
+!data/raw/news_cache/.gitkeep
+
+# Training artifacts (but keep configuration templates)
+data/checkpoints/training_history.json
+data/checkpoints/training_report.json
+data/checkpoints/training_summary.json
+data/evaluation_*.png
+data/evaluation_metrics.json
+data/architecture_*.png
+data/training_flow.png
+
+# Model files
 *.pth
 *.pt
-*.h5
+*.pkl
+*.pickle
 
 # Logs
 *.log
