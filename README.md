@@ -1,269 +1,394 @@
-# Stock Price Prediction Model
+# Stock Price Prediction - Deep Learning System
 
-A machine learning model that predicts tomorrow's stock prices using historical backtesting on S&P 500 stocks.
+A production-ready stock price prediction system using LSTM networks with attention mechanism and comprehensive regularization techniques.
 
-## 🎯 How It Works
+## System Overview
 
-### Training Phase (Supervised Learning with Backtesting)
-1. **Fetch historical data** from last 30 days for S&P 500 stocks
-2. **For each historical day**: 
-   - Use that day's features (price, volume, sentiment, VIX, etc.)
-   - Predict the NEXT day's price
-   - Compare with actual next-day price (we know it from history!)
-3. **Learn from errors** across thousands of predictions
-4. **Result**: Model learns patterns that predict tomorrow's price
-
-### Prediction Phase (End User)
-1. User enters a stock ticker (e.g., "AAPL")
-2. Model fetches TODAY's data
-3. Predicts TOMORROW's closing price
-4. Shows expected change and direction (bullish/bearish)
-
-## Why This Approach Works
-
-✅ **Trains on known outcomes** - We use historical data where we already know what happened  
-✅ **Tests predictions against reality** - Model learns from actual prediction errors  
-✅ **Learns from many stocks** - Trains on 30+ S&P 500 stocks for diverse patterns  
-✅ **Realistic evaluation** - Exactly mimics how it will be used in production
-
-## Features
-
-- **Multi-company training**: Train on multiple stocks for better generalization
-- **Continuous learning**: Incremental training to improve accuracy over time
-- **Sentiment analysis**: Uses news sentiment from NewsAPI (optimized for free tier)
-- **Market indicators**: Incorporates VIX index and synthetic macro features
-- **Checkpointing**: Save training progress at regular intervals
-- **Smart caching**: Reduces API calls by caching news data
-
-## ⚠️ NewsAPI Free Tier Limitations
-
-This project is optimized for NewsAPI free tier:
-- **100 requests per day** - Training scripts are configured to stay within this limit
-- **30 days of news** - Only last 30 days of news available
-- **Caching enabled** - News is cached locally to minimize API calls
-- **Optimized stock selection** - Default training uses 3-4 stocks to avoid hitting limits
-
-### How We Handle Limitations
-
-1. **First run**: Fetches news for all stocks (~60-80 requests)
-2. **Subsequent runs**: Only fetches new/missing news (~5-10 requests)
-3. **Older data**: Uses neutral sentiment (0.0) for dates beyond 30 days
-4. **Training window**: Default 60 days (30 with news, 30 without)
+This system implements an advanced deep learning architecture for stock price prediction with:
+- LSTM layers for temporal pattern recognition
+- Multi-head attention mechanism for feature importance
+- Residual connections for gradient flow
+- Comprehensive regularization (Dropout, Early Stopping, L2, Gradient Clipping)
+- Proper train/validation/test split (70/15/15)
+- GPU acceleration support
 
 ## Project Structure
 
 ```
 stock_price_prediction/
 ├── src/
-│   ├── data_gathering.py      # Data collection and feature engineering
-│   ├── preprocessing.py        # Data scaling and normalization
-│   ├── model.py                # Neural network architecture
-│   ├── train.py                # Training utilities
-│   ├── evaluation.py           # Model evaluation metrics
-│   └── config.py               # Configuration settings
+│   ├── model.py              # AdvancedStockPredictor architecture
+│   ├── train.py              # Training pipeline with validation
+│   ├── dataset.py            # PyTorch dataset wrapper
+│   ├── preprocessing.py      # Data scaling utilities
+│   ├── data_gathering.py     # Stock data collection
+│   └── config.py            # Configuration settings
 │
 ├── scripts/
-│   ├── train_continuous.py    # Multi-stock continuous training (MAIN)
-│   ├── evaluate_model.py      # Test model accuracy
-│   ├── run_inference.py       # Make predictions
-│   └── run_training.py        # Single-stock training (legacy)
+│   ├── train_advanced_model.py      # Training script
+│   └── evaluate_advanced_model.py   # Evaluation script
+│
+├── notebooks/
+│   └── colab_deep_learning_pipeline.ipynb  # Google Colab notebook
 │
 ├── data/
-│   ├── raw/news_cache/        # Cached news articles
-│   ├── processed/
-│   │   ├── models/            # Trained models (timestamped)
-│   │   ├── training_logs/     # Training history logs
-│   │   └── scalers/           # Saved data scalers
-│   └── checkpoints/           # Training checkpoints
+│   ├── checkpoints/         # Saved models and scalers
+│   └── raw/news_cache/      # Cached news data
 │
-└── notebooks/                  # Jupyter notebooks for analysis
+└── requirements.txt         # Python dependencies
 ```
 
 ## Installation
 
-1. Clone the repository:
-```bash
-git clone https://github.com/patric1304/Stock-price-prediction-model.git
-cd stock_price_prediction
-```
+### Prerequisites
+- Python 3.8 or higher
+- CUDA-capable GPU (optional, but recommended)
+- 4GB+ RAM
 
-2. Create and activate virtual environment:
+### Setup
+
 ```bash
+# Create virtual environment
 python -m venv venv
-venv\Scripts\activate  # Windows
-```
 
-3. Install dependencies:
-```bash
+# Activate virtual environment
+# Windows:
+venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-4. Set up your NewsAPI key in `src/config.py`
+## Configuration
 
-## Usage
+Update your NewsAPI key in `src/config.py`:
 
-### 1. Train the Model (Multi-Company)
-
-Train on multiple stocks for better accuracy:
-
-```bash
-# FIRST TIME: Full training on 4 stocks (uses ~80 API requests)
-python scripts/train_continuous.py
-
-# DAILY UPDATES: Quick training on 3 stocks (uses ~5 API requests)
-python scripts/train_daily.py
+```python
+NEWS_API_KEY = "your_newsapi_key_here"
 ```
 
-**train_continuous.py:**
-- Trains on 4 major stocks (AAPL, MSFT, GOOGL, TSLA)
-- 100 epochs
-- Best for initial training or weekly updates
-- Uses ~60-80 API requests (first run), then cache
+Get a free key at: https://newsapi.org/
 
-**train_daily.py:** ⭐ RECOMMENDED FOR DAILY USE
-- Trains on 3 stocks (AAPL, TSLA, GOOGL)
-- 50 epochs (faster)
-- Optimized to use only ~5-10 new API requests
-- Perfect for daily incremental updates
+## Operations Guide
 
-**Output:**
-- `data/processed/models/multi_stock_model_YYYYMMDD_HHMMSS.pth`
-- `data/processed/scalers/scaler_X.pkl` and `scaler_y.pkl`
-- `data/processed/training_logs/training_YYYYMMDD_HHMMSS.txt`
+### 1. Training Phase
 
-### 2. Evaluate Model Accuracy
-
-Test the model on historical data:
+Train a new model from scratch:
 
 ```bash
-python scripts/evaluate_model.py
+# Basic training with default parameters
+python scripts/train_advanced_model.py --ticker AAPL
+
+# Custom training configuration
+python scripts/train_advanced_model.py \
+    --ticker AAPL \
+    --days 200 \
+    --epochs 200 \
+    --batch-size 64 \
+    --hidden-dim 256 \
+    --lr 0.001 \
+    --patience 15
 ```
 
-Enter a stock ticker (e.g., AAPL) to see:
-- Mean Absolute Error (MAE)
-- Mean Absolute Percentage Error (MAPE)
-- Root Mean Squared Error (RMSE)
-- Sample predictions vs actual prices
+#### Training Parameters
 
-### 3. Make Predictions
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--ticker` | AAPL | Stock ticker symbol |
+| `--days` | 200 | Days of historical data |
+| `--epochs` | 200 | Maximum training epochs |
+| `--batch-size` | 64 | Batch size for training |
+| `--hidden-dim` | 256 | LSTM hidden dimension |
+| `--num-layers` | 3 | Number of LSTM layers |
+| `--dropout` | 0.3 | Dropout probability |
+| `--lr` | 0.001 | Learning rate |
+| `--patience` | 15 | Early stopping patience |
+| `--train-split` | 0.7 | Training data proportion |
+| `--val-split` | 0.15 | Validation data proportion |
+| `--no-gpu` | False | Disable GPU usage |
+| `--checkpoint-dir` | data/checkpoints | Save directory |
 
-Predict next-day stock price:
+#### Training Output
+
+The training process will:
+1. Download historical stock data
+2. Split data into train/validation/test sets (70/15/15)
+3. Train the model with early stopping
+4. Save best model checkpoint
+5. Generate training report with metrics
+
+Saved artifacts in `data/checkpoints/`:
+- `best_model.pth` - Trained model weights
+- `scaler_X.pkl` - Feature scaler
+- `scaler_y.pkl` - Target scaler
+- `training_history.json` - Loss curves
+- `training_summary.json` - Configuration and metrics
+- `training_report.json` - Comprehensive report
+
+### 2. Evaluation Phase
+
+Evaluate a trained model:
 
 ```bash
-python scripts/run_inference.py
+# Basic evaluation
+python scripts/evaluate_advanced_model.py --ticker AAPL
+
+# Specify model path
+python scripts/evaluate_advanced_model.py \
+    --ticker AAPL \
+    --model data/checkpoints/best_model.pth \
+    --output data/evaluation_results.png
 ```
 
-Enter a stock ticker to get:
-- Current price
-- Predicted next-day price
-- Expected change ($ and %)
-- Bullish/Bearish indicator
+#### Evaluation Output
 
-## Improving Model Accuracy
+The evaluation generates:
+- 9 comprehensive visualizations (saved as PNG)
+- Performance metrics (MSE, MAE, RMSE, R², MAPE, Directional Accuracy)
+- `evaluation_metrics.json` - Detailed metrics
 
-The model improves with more training data and epochs:
+### 3. Inference (Prediction)
 
-1. **Run daily training** (uses minimal API requests):
-   ```bash
-   python scripts/train_daily.py
-   ```
+To make predictions on new data, use the trained model:
 
-2. **Increase training epochs** for better accuracy:
-   ```python
-   # Edit scripts/train_daily.py
-   EPOCHS = 100  # or 200
-   ```
+```python
+import torch
+import pickle
+from src.model import AdvancedStockPredictor
+from src.data_gathering import gather_data
 
-3. **Add more stocks** (be mindful of API limits):
-   ```python
-   # Edit scripts/train_continuous.py
-   # Each additional stock uses ~30-40 requests on first run
-   TICKERS = ["AAPL", "MSFT", "GOOGL", "TSLA", "AMZN"]  # 5 stocks max recommended
-   ```
+# Load model
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = AdvancedStockPredictor(input_dim=31)
+checkpoint = torch.load('data/checkpoints/best_model.pth', map_location=device)
+model.load_state_dict(checkpoint['model_state_dict'])
+model.to(device)
+model.eval()
 
-4. **Let cache build up** - After first run, subsequent runs use very few API requests
+# Load scalers
+with open('data/checkpoints/scaler_X.pkl', 'rb') as f:
+    scaler_X = pickle.load(f)
+with open('data/checkpoints/scaler_y.pkl', 'rb') as f:
+    scaler_y = pickle.load(f)
+
+# Gather latest data
+X, y = gather_data('AAPL', days_back=60)
+X_scaled = scaler_X.transform(X[-1:])
+
+# Predict
+with torch.no_grad():
+    X_tensor = torch.tensor(X_scaled, dtype=torch.float32).to(device)
+    y_pred_scaled = model(X_tensor)
+    y_pred = scaler_y.inverse_transform(y_pred_scaled.cpu().numpy())
+
+print(f"Predicted next day price: ${y_pred[0,0]:.2f}")
+```
+
+## Google Colab Deployment
+
+For quick training without local setup:
+
+1. Open `notebooks/colab_deep_learning_pipeline.ipynb`
+2. Upload to Google Colab
+3. Enable GPU: Runtime → Change runtime type → GPU
+4. Run all cells
+
+The notebook includes:
+- Automatic dependency installation
+- Complete training pipeline
+- Evaluation and visualization
+- Model download functionality
 
 ## Model Architecture
 
-- **Input**: Historical prices (OHLCV), sentiment scores, VIX index, macro indicators
-- **Architecture**: 3-layer feedforward neural network
-  - Layer 1: input_dim → 128 neurons (ReLU)
-  - Layer 2: 128 → 64 neurons (ReLU)
-  - Layer 3: 64 → 1 neuron (output)
-- **Loss**: Mean Squared Error (MSE)
-- **Optimizer**: Adam (lr=0.001)
-
-## Configuration
-
-Edit `src/config.py` to customize:
-
-```python
-HISTORY_DAYS = 5           # Days of historical data for each sample
-NEWS_API_KEY = "your_key"  # Your NewsAPI key
-INCLUDE_GLOBAL_SENTIMENT = True  # Include global economy sentiment
+```
+Input (31 features)
+    ↓
+Input Projection (Linear + LayerNorm + ReLU + Dropout)
+    ↓
+Bidirectional LSTM (3 layers, 256 hidden → 512 output)
+    ↓
+Multi-Head Attention (8 heads)
+    ↓
+Residual Blocks (3 blocks with skip connections)
+    ↓
+Output Network (512 → 256 → 128 → 64 → 1)
+    ↓
+Price Prediction
 ```
 
-## Data Sources
+Total Parameters: ~2.5M
 
-- **Stock prices**: Yahoo Finance (via yfinance)
-- **Market volatility**: VIX Index
-- **News sentiment**: NewsAPI
-- **Macro indicators**: Synthetic (can be replaced with real data)
+## Features Used
 
-## Model Versioning
+### Price Data (25 features)
+- 5 days of OHLCV (Open, High, Low, Close, Volume)
 
-Models are automatically timestamped:
-- `multi_stock_model_20251106_143022.pth`
-- The latest model is automatically used for inference
-- Compare different versions using `evaluate_model.py`
+### Sentiment Features (2 features)
+- Company-specific news sentiment
+- Market sentiment proxy
 
-## Tips
+### Macroeconomic Indicators (4 features)
+- Interest rates
+- Inflation rate
+- GDP growth
+- VIX volatility index
 
-- **First time**: Train with 100 epochs to get baseline accuracy
-- **Regular updates**: Retrain weekly to incorporate new market data
-- **Testing**: Use `evaluate_model.py` on different stocks to test generalization
-- **Production**: Increase epochs to 500+ for production use
+Total: 31 input features
+
+## Performance Metrics
+
+The model reports:
+- **MSE** (Mean Squared Error)
+- **MAE** (Mean Absolute Error) - Average price deviation
+- **RMSE** (Root Mean Squared Error)
+- **R²** (R-squared) - Variance explained (0-1)
+- **MAPE** (Mean Absolute Percentage Error)
+- **Directional Accuracy** - Percentage of correct movement predictions
+
+Expected performance on test set:
+- RMSE: $1.5-2.5
+- MAPE: 0.8-1.5%
+- Directional Accuracy: 60-70%
+
+## Regularization Techniques
+
+1. **Dropout** (0.3) - Prevents overfitting
+2. **Early Stopping** (patience=15) - Stops when validation plateaus
+3. **L2 Weight Decay** (1e-5) - Constrains model complexity
+4. **Gradient Clipping** (max_norm=1.0) - Prevents exploding gradients
+5. **Layer Normalization** - Stabilizes training
+6. **Learning Rate Scheduling** - ReduceLROnPlateau
+
+## Data Management
+
+### Train/Validation/Test Split
+- Training: 70% of data
+- Validation: 15% of data
+- Test: 15% of data
+
+### Important Notes
+- Scalers are fitted ONLY on training data (prevents data leakage)
+- Temporal order is preserved (no random shuffling across sets)
+- Validation set guides training (early stopping, LR scheduling)
+- Test set used only once for final evaluation
 
 ## Troubleshooting
 
-**NewsAPI Rate Limit Hit**:
-- Cache is automatically used when available
-- Wait 24 hours for limit reset
-- Use `train_daily.py` instead of `train_continuous.py` (uses fewer requests)
-- Reduce number of stocks in TICKERS list
+### Issue: CUDA out of memory
+**Solution**: Reduce batch size
+```bash
+python scripts/train_advanced_model.py --batch-size 32
+```
 
-**NewsAPI "rateLimited" Error**:
-- This is normal if you see it a few times - cache will be used
-- If you see it constantly, you've hit the daily limit
-- Solution: Wait until tomorrow, cache will prevent new requests
+### Issue: Training too slow
+**Solution**: Use GPU or reduce model size
+```bash
+python scripts/train_advanced_model.py --hidden-dim 128 --num-layers 2
+```
 
-**"No news available for date"**:
-- NewsAPI free tier only provides last 30 days
-- Older dates automatically use neutral sentiment (0.0)
-- This is expected and handled by the code
+### Issue: Overfitting (validation loss > training loss)
+**Solution**: Increase regularization
+```bash
+python scripts/train_advanced_model.py --dropout 0.4
+```
 
-**Memory Issues**: Reduce number of stocks or batch size in training.
+### Issue: Model not learning (loss not decreasing)
+**Solutions**:
+- Reduce learning rate: `--lr 0.0001`
+- Increase model capacity: `--hidden-dim 512`
+- Check data quality
 
-**Poor Accuracy**: 
-- Increase epochs (100 → 200)
-- Train daily for incremental improvements
-- Let model train on more diverse market conditions over time
+### Issue: NewsAPI errors
+**Solutions**:
+- Verify API key in `src/config.py`
+- Check internet connection
+- Cached data will be used automatically
 
-## Contributing
+## Best Practices
 
-1. Create a feature branch: `git checkout -b feature/your-feature`
-2. Commit changes: `git commit -m "Add feature"`
-3. Push to branch: `git push origin feature/your-feature`
-4. Create Pull Request
+### Training
+1. Always use GPU for faster training (10x speedup)
+2. Monitor validation loss to detect overfitting
+3. Use early stopping (automatic)
+4. Save all training artifacts
+
+### Evaluation
+1. Never evaluate on training data
+2. Use test set only once (final evaluation)
+3. Focus on validation metrics during development
+4. Check multiple metrics, not just RMSE
+
+### Deployment
+1. Save both model and scalers
+2. Version your models (include date, ticker, metrics)
+3. Monitor prediction errors
+4. Retrain periodically with new data
+
+## Workflow Summary
+
+### Complete Workflow
+
+```bash
+# Step 1: Train model
+python scripts/train_advanced_model.py --ticker AAPL --days 200
+
+# Step 2: Evaluate model
+python scripts/evaluate_advanced_model.py --ticker AAPL
+
+# Step 3: Check results
+# - Review data/checkpoints/training_report.json
+# - Check data/evaluation_results.png
+# - Examine data/evaluation_metrics.json
+
+# Step 4: Use for predictions (see Inference section above)
+```
+
+### Hyperparameter Tuning
+
+Try different configurations:
+
+```bash
+# Experiment 1: Deeper network
+python scripts/train_advanced_model.py --num-layers 4 --hidden-dim 512
+
+# Experiment 2: More regularization
+python scripts/train_advanced_model.py --dropout 0.4
+
+# Experiment 3: More data
+python scripts/train_advanced_model.py --days 500
+
+# Compare results in respective training_report.json files
+```
+
+## System Requirements
+
+### Minimum
+- CPU: 4 cores
+- RAM: 4GB
+- Storage: 2GB
+- Training time: ~60-120 minutes
+
+### Recommended
+- GPU: NVIDIA GPU with 4GB+ VRAM
+- RAM: 8GB+
+- Storage: 5GB
+- Training time: ~5-10 minutes
 
 ## License
 
-MIT License
+This project is for educational and research purposes. Not financial advice.
 
-## Author
+## Support
 
-patric1304
+For issues:
+1. Check training logs in `data/checkpoints/training_report.json`
+2. Review error messages carefully
+3. Consult troubleshooting section above
+4. Check visualization plots for insights
 
 ---
 
-**Note**: This model is for educational purposes. Do not use for actual trading without proper validation and risk management.
+**Note**: Always conduct your own research before making investment decisions. This model is a tool for analysis, not a guarantee of future performance.

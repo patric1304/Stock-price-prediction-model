@@ -1,0 +1,56 @@
+# Stock Training List
+# Lines starting with # are ignored
+# Format: One ticker per line
+# 
+# IMPORTANT: NewsAPI free tier = 100 requests/day
+# Each stock uses ~3-5 API calls during training
+# Limit: ~25 stocks per day to stay under API limits
+#
+# Strategy: Train different stocks on different days
+# Run: python scripts/train_stock.py --from-list
+
+# --- MEGA CAP TECH (Train These First) ---
+AAPL
+MSFT
+GOOGL
+AMZN
+NVDA
+META
+TSLA
+
+# --- FINANCE ---
+JPM
+BAC
+WFC
+GS
+
+# --- HEALTHCARE ---
+JNJ
+UNH
+PFE
+ABBV
+
+# --- CONSUMER ---
+WMT
+HD
+MCD
+NKE
+
+# --- INDUSTRIAL ---
+CAT
+BA
+UPS
+
+# --- ENERGY ---
+XOM
+CVX
+
+# --- TELECOM ---
+T
+VZ
+
+# TOTAL: 27 stocks (safe for API limits)
+#
+# To add more stocks, create a second list file:
+# config/stocks_to_train_batch2.txt
+# Then run: python scripts/train_stock.py --from-list --stocks-file config/stocks_to_train_batch2.txt
