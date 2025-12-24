@@ -20,13 +20,3 @@ NEWSAPI_ENDPOINT = "https://newsapi.org/v2/everything"
 
 # === OPTIONS ===
 INCLUDE_GLOBAL_SENTIMENT = False  # Removed - yfinance (VIX) handles market sentiment
-
-# Configuration settings
-
-# NewsAPI Configuration
-NEWS_API_KEY = 'YOUR_ACTUAL_API_KEY_HERE'
-
-# Data Configuration
-DEFAULT_TICKER = 'AAPL'
-DATA_START_DATE = '2019-01-01'  # Already correct - 5 years
-LOOKBACK_DAYS = 1825  # Change from 200 to 1825 (5 years)
