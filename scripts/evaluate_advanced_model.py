@@ -3,33 +3,101 @@ Enhanced Model Evaluation Script
 Provides comprehensive analysis of model performance
 """
 
+import sys
+from pathlib import Path
+
+# Allow running this file directly via `python scripts/evaluate_advanced_model.py`
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pathlib import Path
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import json
+import re
 
 from src.model import AdvancedStockPredictor
 from src.data_gathering import gather_data
-from src.preprocessing import scale_features
 from src.dataset import StockDataset
 from torch.utils.data import DataLoader
 
 
+def _infer_model_kwargs_from_state_dict(state_dict: dict, input_dim: int) -> dict:
+    """Best-effort reconstruction of model kwargs from a saved state_dict."""
+    # Infer hidden_dim from the first linear layer in input_projection
+    hidden_dim = None
+    w = state_dict.get("input_projection.0.weight")
+    if w is not None and hasattr(w, "shape") and len(w.shape) == 2:
+        hidden_dim = int(w.shape[0])
+
+    # Infer num_layers from LSTM parameter keys: lstm.weight_ih_l{k}
+    layer_idxs = []
+    for k in state_dict.keys():
+        m = re.match(r"lstm\.weight_ih_l(\d+)$", k)
+        if m:
+            layer_idxs.append(int(m.group(1)))
+    num_layers = (max(layer_idxs) + 1) if layer_idxs else 1
+
+    # Infer history_days from input_dim assuming extra features are sentiment(2) + vix(1)
+    extra_dim = 3
+    history_days = None
+    if input_dim > extra_dim and (input_dim - extra_dim) % 5 == 0:
+        history_days = int((input_dim - extra_dim) // 5)
+
+    return {
+        "input_dim": int(input_dim),
+        "hidden_dim": int(hidden_dim) if hidden_dim is not None else 256,
+        "num_layers": int(num_layers),
+        # Dropout has no parameters; pick a sane default for eval.
+        "dropout": 0.0,
+        "history_days": int(history_days) if history_days is not None else None,
+    }
+
+
 def load_model_and_scalers(model_path, scaler_X_path, scaler_y_path, input_dim, device='cpu'):
-    """Load trained model and scalers"""
+    """Load trained model + scalers, reconstructing architecture from checkpoint when available."""
     import pickle
     
-    # Load model
-    model = AdvancedStockPredictor(input_dim=input_dim)
     checkpoint = torch.load(model_path, map_location=device)
-    
-    if 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
+
+    # target_mode may live at top-level (newer checkpoints) or be absent (older checkpoints)
+    target_mode = None
+    if isinstance(checkpoint, dict):
+        target_mode = checkpoint.get('target_mode')
+
+    # Load model weights (support both raw state_dict and dict checkpoints)
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        state_dict = checkpoint['model_state_dict']
+        model_kwargs = checkpoint.get('model_kwargs') or {}
     else:
-        model.load_state_dict(checkpoint)
+        state_dict = checkpoint
+        model_kwargs = {}
+
+    # Reconstruct model architecture
+    if not model_kwargs:
+        model_kwargs = _infer_model_kwargs_from_state_dict(state_dict, input_dim=input_dim)
+
+    history_days = model_kwargs.get('history_days')
+    if history_days is None or int(history_days) <= 0:
+        model = AdvancedStockPredictor(
+            input_dim=input_dim,
+            hidden_dim=int(model_kwargs.get('hidden_dim', 256)),
+            num_layers=int(model_kwargs.get('num_layers', 3)),
+            dropout=float(model_kwargs.get('dropout', 0.3)),
+        )
+    else:
+        model = AdvancedStockPredictor(
+            input_dim=input_dim,
+            hidden_dim=int(model_kwargs.get('hidden_dim', 256)),
+            num_layers=int(model_kwargs.get('num_layers', 3)),
+            dropout=float(model_kwargs.get('dropout', 0.3)),
+            history_days=int(history_days),
+        )
+
+    model.load_state_dict(state_dict)
     
     model = model.to(device)
     model.eval()
@@ -40,10 +108,10 @@ def load_model_and_scalers(model_path, scaler_X_path, scaler_y_path, input_dim, 
     with open(scaler_y_path, 'rb') as f:
         scaler_y = pickle.load(f)
     
-    return model, scaler_X, scaler_y
+    return model, scaler_X, scaler_y, target_mode
 
 
-def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', batch_size=64):
+def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', batch_size=64, *, current_close=None, target_mode='price'):
     """
     Comprehensive model evaluation with multiple metrics
     """
@@ -71,20 +139,37 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
     predictions = np.array(all_predictions).flatten()
     targets = np.array(all_targets).flatten()
     
-    # Inverse transform to original scale
+    # Inverse transform to original scale (these are targets in "target_mode" space)
     predictions_original = scaler_y.inverse_transform(predictions.reshape(-1, 1)).flatten()
     targets_original = scaler_y.inverse_transform(targets.reshape(-1, 1)).flatten()
+
+    mode = (target_mode or 'price').strip().lower()
+    if mode not in {'price', 'delta'}:
+        mode = 'price'
+
+    # Convert into price space for metrics/plots (especially important for delta targets)
+    if mode == 'delta':
+        if current_close is None:
+            raise ValueError("current_close is required when evaluating delta targets")
+        cc = np.asarray(current_close, dtype=np.float32).reshape(-1)
+        if len(cc) != len(predictions_original):
+            raise ValueError(f"current_close length {len(cc)} != predictions length {len(predictions_original)}")
+        predictions_price = cc + predictions_original
+        targets_price = cc + targets_original
+    else:
+        predictions_price = predictions_original
+        targets_price = targets_original
     
     # Calculate metrics
-    mse = mean_squared_error(targets_original, predictions_original)
-    mae = mean_absolute_error(targets_original, predictions_original)
+    mse = mean_squared_error(targets_price, predictions_price)
+    mae = mean_absolute_error(targets_price, predictions_price)
     rmse = np.sqrt(mse)
-    r2 = r2_score(targets_original, predictions_original)
-    mape = np.mean(np.abs((targets_original - predictions_original) / targets_original)) * 100
+    r2 = r2_score(targets_price, predictions_price)
+    mape = np.mean(np.abs((targets_price - predictions_price) / np.maximum(np.abs(targets_price), 1e-8))) * 100
     
     # Directional accuracy (did we predict the right direction?)
-    actual_direction = np.diff(targets_original) > 0
-    pred_direction = np.diff(predictions_original) > 0
+    actual_direction = np.diff(targets_price) > 0
+    pred_direction = np.diff(predictions_price) > 0
     directional_accuracy = np.mean(actual_direction == pred_direction) * 100
     
     metrics = {
@@ -94,11 +179,50 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
         'r2': float(r2),
         'mape': float(mape),
         'directional_accuracy': float(directional_accuracy),
-        'predictions': predictions_original,
-        'targets': targets_original
+        'predictions': predictions_price,
+        'targets': targets_price,
+        'target_mode': mode,
     }
     
     return metrics
+
+
+def evaluate_baseline_naive(y_true, current_close=None, **kwargs):
+    """
+    Naive baseline: predict next close as today's close (persistence).
+    Must handle y_true being shaped (N,) or (N,1).
+    """
+    # ---- normalize shapes to 1D ----
+    actual = np.asarray(y_true, dtype=np.float32).reshape(-1)
+
+    if current_close is None:
+        # fallback: use naive persistence on actual itself (shifted)
+        pred = np.r_[actual[0], actual[:-1]]
+    else:
+        pred = np.asarray(current_close, dtype=np.float32).reshape(-1)
+
+    # ---- metrics (unchanged logic, but with 1D arrays) ----
+    mse = float(np.mean((pred - actual) ** 2))
+    mae = float(np.mean(np.abs(pred - actual)))
+    rmse = float(np.sqrt(mse))
+    mape = float(np.mean(np.abs((actual - pred) / np.maximum(np.abs(actual), 1e-8))) * 100)
+
+    # ---- directional accuracy (diff over time axis) ----
+    actual_direction = np.sign(np.diff(actual))          # (N-1,)
+    pred_direction = np.sign(np.diff(pred))              # (N-1,)
+
+    m = min(len(actual_direction), len(pred_direction))
+    directional_accuracy = float(np.mean(actual_direction[:m] == pred_direction[:m]) * 100) if m > 0 else 0.0
+
+    return {
+        "mse": mse,
+        "mae": mae,
+        "rmse": rmse,
+        "mape": mape,
+        "directional_accuracy": directional_accuracy,
+        "pred": pred,
+        "actual": actual,
+    }
 
 
 def plot_comprehensive_analysis(metrics, ticker, save_path=None):
@@ -234,9 +358,13 @@ def main():
     
     parser = argparse.ArgumentParser(description='Evaluate trained stock prediction model')
     parser.add_argument('--ticker', type=str, default='AAPL', help='Stock ticker')
-    parser.add_argument('--model', type=str, default='data/checkpoints/best_model.pth', 
-                       help='Path to model checkpoint')
-    parser.add_argument('--days', type=int, default=200, help='Days of historical data')
+    parser.add_argument('--model', type=str, default=None,
+                       help='Path to model checkpoint (default: data/checkpoints/<TICKER>/best_model.pth)')
+    parser.add_argument('--scaler-x', type=str, default=None,
+                       help='Path to saved feature scaler (default: data/checkpoints/<TICKER>/scaler_X.pkl)')
+    parser.add_argument('--scaler-y', type=str, default=None,
+                       help='Path to saved target scaler (default: data/checkpoints/<TICKER>/scaler_y.pkl)')
+    parser.add_argument('--days', type=int, default=1825, help='Days of historical data')
     parser.add_argument('--output', type=str, default='data/evaluation_results.png',
                        help='Path to save evaluation plots')
     
@@ -247,8 +375,9 @@ def main():
     print(f"Using device: {device}\n")
     
     # Gather data
-    print(f"Gathering data for {args.ticker}...")
-    X, y = gather_data(args.ticker, days_back=args.days)
+    ticker = args.ticker.upper()
+    print(f"Gathering data for {ticker}...")
+    X, y, meta = gather_data(ticker, days_back=args.days, return_meta=True)
     print(f"Data shape: X={X.shape}, y={y.shape}\n")
     
     # For evaluation, we'll use the test split (last 15%)
@@ -257,31 +386,59 @@ def main():
     y_test = y[-test_size:]
     
     print(f"Evaluating on test set: {len(X_test)} samples\n")
-    
-    # Note: You'll need to save scalers during training to load them here
-    # For now, we'll create them from all data (not ideal - should use training scalers)
-    X_scaled, y_scaled, scaler_X, scaler_y = scale_features(X, y)
-    
-    # Load model
-    print("Loading model...")
-    model = AdvancedStockPredictor(input_dim=X.shape[1])
-    
-    if Path(args.model).exists():
-        checkpoint = torch.load(args.model, map_location=device)
-        if 'model_state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['model_state_dict'])
+
+    # Resolve default artifact paths
+    default_dir = Path('data/checkpoints') / ticker
+    model_path = Path(args.model) if args.model else (default_dir / 'best_model.pth')
+    scaler_x_path = Path(args.scaler_x) if args.scaler_x else (default_dir / 'scaler_X.pkl')
+    scaler_y_path = Path(args.scaler_y) if args.scaler_y else (default_dir / 'scaler_y.pkl')
+
+    if not model_path.exists() or not scaler_x_path.exists() or not scaler_y_path.exists():
+        raise FileNotFoundError(
+            "Missing trained artifacts. Expected files:\n"
+            f"  Model:   {model_path}\n"
+            f"  ScalerX: {scaler_x_path}\n"
+            f"  ScalerY: {scaler_y_path}\n"
+            "Run training first: python scripts/train_advanced_model.py --ticker <TICKER>"
+        )
+
+    print("Loading model and scalers...")
+    model, scaler_X, scaler_y, checkpoint_target_mode = load_model_and_scalers(
+        model_path=str(model_path),
+        scaler_X_path=str(scaler_x_path),
+        scaler_y_path=str(scaler_y_path),
+        input_dim=X.shape[1],
+        device=device
+    )
+    print(f"Loaded from {default_dir}\n")
+
+    # If the checkpoint specifies a target mode, re-gather data to match it.
+    if checkpoint_target_mode:
+        desired_mode = str(checkpoint_target_mode).strip().lower()
+        if desired_mode in {'price', 'delta'}:
+            print(f"Checkpoint target mode: {desired_mode}")
+            X, y, meta = gather_data(ticker, days_back=args.days, return_meta=True, target_mode=desired_mode)
+            test_size = int(0.15 * len(X))
+            X_test = X[-test_size:]
+            y_test = y[-test_size:]
+            print(f"Rebuilt evaluation data for target mode '{desired_mode}'.")
         else:
-            model.load_state_dict(checkpoint)
-        model = model.to(device)
-        print(f"Model loaded from {args.model}\n")
+            desired_mode = 'price'
     else:
-        print(f"Warning: Model file not found at {args.model}")
-        print("Evaluating with random weights (for demonstration)\n")
+        desired_mode = 'price'
     
     # Evaluate
     print("Evaluating model...")
     metrics = evaluate_model_comprehensive(
-        model, X_test, y_test, scaler_X, scaler_y, device
+        model, X_test, y_test, scaler_X, scaler_y, device,
+        current_close=meta['current_close'][-test_size:],
+        target_mode=desired_mode,
+    )
+
+    # Baseline (naive): predict next close equals current close
+    baseline = evaluate_baseline_naive(
+        y_true=metrics['targets'],
+        current_close=meta['current_close'][-test_size:],
     )
     
     # Print results
@@ -294,6 +451,11 @@ def main():
     print(f"R²:   {metrics['r2']:.4f}")
     print(f"MAPE: {metrics['mape']:.2f}%")
     print(f"Directional Accuracy: {metrics['directional_accuracy']:.2f}%")
+    print("\nBaseline (naive: next close = current close):")
+    print(f"  RMSE: ${baseline['rmse']:.4f}")
+    print(f"  MAE:  ${baseline['mae']:.4f}")
+    print(f"  MAPE: {baseline['mape']:.2f}%")
+    print(f"  Directional Accuracy: {baseline['directional_accuracy']:.2f}%")
     print("="*60 + "\n")
     
     # Plot results
@@ -304,6 +466,7 @@ def main():
     output_path = Path(args.output).parent / 'evaluation_metrics.json'
     metrics_to_save = {k: v for k, v in metrics.items() 
                        if k not in ['predictions', 'targets']}
+    metrics_to_save['baseline_naive'] = baseline
     with open(output_path, 'w') as f:
         json.dump(metrics_to_save, f, indent=2)
     print(f"\nMetrics saved to {output_path}")

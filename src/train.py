@@ -61,6 +61,7 @@ def train_model_advanced(
     train_split=0.7,
     val_split=0.15,
     patience=15,
+    target_mode=None,
     use_gpu=True,
     checkpoint_dir='data/checkpoints',
     verbose=True
@@ -248,6 +249,14 @@ def train_model_advanced(
             checkpoint_path = Path(checkpoint_dir) / 'best_model.pth'
             torch.save({
                 'epoch': epoch,
+                'target_mode': target_mode,
+                'model_kwargs': {
+                    'input_dim': int(input_dim),
+                    'hidden_dim': int(hidden_dim),
+                    'num_layers': int(num_layers),
+                    'dropout': float(dropout),
+                    'history_days': int(getattr(model, 'history_days', 0) or 0),
+                },
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'val_loss': val_loss,
@@ -319,6 +328,7 @@ def train_model_advanced(
         'epochs_trained': len(history['train_loss']),
         'best_val_loss': float(best_val_loss),
         'test_metrics': test_metrics,
+        'target_mode': target_mode,
         'model_config': {
             'input_dim': input_dim,
             'hidden_dim': hidden_dim,

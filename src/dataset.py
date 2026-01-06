@@ -10,6 +10,5 @@ class StockDataset(Dataset):
         return len(self.y)
 
     def __getitem__(self, idx):
-        # Return shapes: X[idx] and y[idx] flattened to 1D
-        # Model outputs [batch, 1], so target should be [batch, 1] after batching
-        return self.X[idx], self.y[idx].flatten()
+        # Ensure target has shape (1,) so batching yields (batch, 1)
+        return self.X[idx], self.y[idx].view(1)

@@ -15,9 +15,11 @@ from scripts.train_advanced_model import main as train_main
 
 def model_exists(ticker):
     """Check if model and scalers exist for a ticker."""
-    model_path = Path(f"data/processed/models/{ticker}_model.pth")
-    scaler_path = Path(f"data/processed/scalers/{ticker}_scalers.pkl")
-    return model_path.exists() and scaler_path.exists()
+    base = Path("data/checkpoints") / ticker.upper()
+    model_path = base / "best_model.pth"
+    scaler_x_path = base / "scaler_X.pkl"
+    scaler_y_path = base / "scaler_y.pkl"
+    return model_path.exists() and scaler_x_path.exists() and scaler_y_path.exists()
 
 
 def load_stocks_list(file_path='config/stocks_to_train.txt'):
@@ -66,7 +68,7 @@ def train_stock(ticker, force=False, skip_existing=False, **kwargs):
     if 'batch_size' in kwargs and kwargs['batch_size']:
         args.extend(['--batch-size', str(kwargs['batch_size'])])
     if 'learning_rate' in kwargs and kwargs['learning_rate']:
-        args.extend(['--learning-rate', str(kwargs['learning_rate'])])
+        args.extend(['--lr', str(kwargs['learning_rate'])])
     
     # Call training by modifying sys.argv
     print(f"\n[TRAINING] Starting training for {ticker}...")

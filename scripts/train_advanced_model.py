@@ -3,35 +3,46 @@ Advanced Deep Learning Training Script
 Train the enhanced model with proper validation and regularization
 """
 
+import sys
+from pathlib import Path
+
+# Allow running this file directly via `python scripts/train_advanced_model.py`
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import torch
 import numpy as np
-from pathlib import Path
 import argparse
 import json
 from datetime import datetime
 
-from src.data_gathering import gather_data
+from src.data_gathering import gather_data, NewsAPIRateLimitError
 from src.train import train_model_advanced
 from src.model import AdvancedStockPredictor
+from src.config import TARGET_MODE
 
 
-def main():
+NEWSAPI_RATE_LIMIT_EXIT_CODE = 42
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description='Train Advanced Stock Prediction Model')
     
     # Data arguments
     parser.add_argument('--ticker', type=str, default='AAPL', help='Stock ticker symbol')
     parser.add_argument('--days', type=int, default=1825, help='Days of historical data to gather (default: 1825 = 5 years)')
     
-    # Model arguments
-    parser.add_argument('--hidden-dim', type=int, default=256, help='Hidden dimension size')
-    parser.add_argument('--num-layers', type=int, default=3, help='Number of LSTM layers')
-    parser.add_argument('--dropout', type=float, default=0.3, help='Dropout probability')
+    # Model arguments (defaults tuned for this dataset size; medium model)
+    parser.add_argument('--hidden-dim', type=int, default=128, help='Hidden dimension size')
+    parser.add_argument('--num-layers', type=int, default=2, help='Number of LSTM layers')
+    parser.add_argument('--dropout', type=float, default=0.2, help='Dropout probability')
     
     # Training arguments
     parser.add_argument('--epochs', type=int, default=200, help='Maximum training epochs')
     parser.add_argument('--batch-size', type=int, default=64, help='Batch size')
     parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--patience', type=int, default=15, help='Early stopping patience')
+    parser.add_argument('--patience', type=int, default=30, help='Early stopping patience')
     
     # Data split arguments
     parser.add_argument('--train-split', type=float, default=0.7, help='Training data proportion')
@@ -40,7 +51,7 @@ def main():
     # System arguments
     parser.add_argument('--no-gpu', action='store_true', help='Disable GPU usage')
     parser.add_argument('--checkpoint-dir', type=str, default='data/checkpoints', 
-                       help='Directory to save checkpoints')
+                       help='Base directory to save checkpoints (a per-ticker subfolder will be created)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     
     args = parser.parse_args()
@@ -57,6 +68,7 @@ def main():
     print(f"\nConfiguration:")
     print(f"  Ticker: {args.ticker}")
     print(f"  Historical Days: {args.days}")
+    print(f"  Target Mode: {TARGET_MODE}")
     print(f"  Model: LSTM + Attention + Residual")
     print(f"  Hidden Dim: {args.hidden_dim}")
     print(f"  LSTM Layers: {args.num_layers}")
@@ -88,15 +100,22 @@ def main():
         print(f"   Targets: {y.shape}")
         print(f"   Total samples: {len(X)}")
         print()
+    except NewsAPIRateLimitError as e:
+        print(f"[ERROR] {e}")
+        print("[ERROR] Stopping because NewsAPI free-tier rate limit was hit.")
+        return NEWSAPI_RATE_LIMIT_EXIT_CODE
     except Exception as e:
         print(f"[ERROR] Error gathering data: {e}")
-        return
+        return 1
     
     # Train model
     print("Starting training...")
     print("="*70)
     
     try:
+        # Save everything into a per-ticker directory to avoid overwriting
+        ticker_checkpoint_dir = str(Path(args.checkpoint_dir) / args.ticker.upper())
+
         model, history, scalers, test_metrics = train_model_advanced(
             X, y,
             epochs=args.epochs,
@@ -108,8 +127,9 @@ def main():
             train_split=args.train_split,
             val_split=args.val_split,
             patience=args.patience,
+            target_mode=TARGET_MODE,
             use_gpu=use_gpu,
-            checkpoint_dir=args.checkpoint_dir,
+            checkpoint_dir=ticker_checkpoint_dir,
             verbose=True
         )
         
@@ -118,7 +138,7 @@ def main():
         print("="*70)
         
         # Save additional artifacts
-        checkpoint_dir = Path(args.checkpoint_dir)
+        checkpoint_dir = Path(ticker_checkpoint_dir)
         
         # Save scalers
         import pickle
@@ -178,9 +198,14 @@ def main():
         print(f"Final Training Loss: {history['train_loss'][-1]:.6f}")
         print(f"Final Validation Loss: {history['val_loss'][-1]:.6f}")
         print("\nTest Set Performance:")
-        print(f"  RMSE: ${test_metrics['rmse']:.2f}")
-        print(f"  MAE:  ${test_metrics['mae']:.2f}")
-        print(f"  MAPE: {test_metrics['mape']:.2f}%")
+        if (TARGET_MODE or "").strip().lower() == "delta":
+            print(f"  RMSE (delta): {test_metrics['rmse']:.4f}")
+            print(f"  MAE  (delta): {test_metrics['mae']:.4f}")
+            print(f"  MAPE (delta): {test_metrics['mape']:.2f}%")
+        else:
+            print(f"  RMSE: ${test_metrics['rmse']:.2f}")
+            print(f"  MAE:  ${test_metrics['mae']:.2f}")
+            print(f"  MAPE: {test_metrics['mape']:.2f}%")
         print("="*70)
         
         print(f"\n[SUCCESS] All artifacts saved to: {checkpoint_dir}")
@@ -191,7 +216,10 @@ def main():
         print(f"\n[ERROR] Training failed: {e}")
         import traceback
         traceback.print_exc()
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
