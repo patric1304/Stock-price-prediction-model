@@ -28,8 +28,8 @@ ENV/
 # Data files (cached data, models, raw data)
 data/raw/news_cache/
 data/processed/
-data/checkpoints/*.pth
-data/checkpoints/*.pkl
+data/checkpoints/**
+scripts/data/
 *.csv
 *.h5
 
@@ -38,9 +38,6 @@ data/checkpoints/*.pkl
 !data/raw/news_cache/.gitkeep
 
 # Training artifacts (but keep configuration templates)
-data/checkpoints/training_history.json
-data/checkpoints/training_report.json
-data/checkpoints/training_summary.json
 data/evaluation_*.png
 data/evaluation_metrics.json
 data/architecture_*.png
