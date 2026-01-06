@@ -248,6 +248,13 @@ def train_model_advanced(
             checkpoint_path = Path(checkpoint_dir) / 'best_model.pth'
             torch.save({
                 'epoch': epoch,
+                'model_kwargs': {
+                    'input_dim': int(input_dim),
+                    'hidden_dim': int(hidden_dim),
+                    'num_layers': int(num_layers),
+                    'dropout': float(dropout),
+                    'history_days': int(getattr(model, 'history_days', 0) or 0),
+                },
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'val_loss': val_loss,

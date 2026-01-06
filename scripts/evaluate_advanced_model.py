@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import json
+import re
 
 from src.model import AdvancedStockPredictor
 from src.data_gathering import gather_data
@@ -24,18 +25,74 @@ from src.dataset import StockDataset
 from torch.utils.data import DataLoader
 
 
+def _infer_model_kwargs_from_state_dict(state_dict: dict, input_dim: int) -> dict:
+    """Best-effort reconstruction of model kwargs from a saved state_dict."""
+    # Infer hidden_dim from the first linear layer in input_projection
+    hidden_dim = None
+    w = state_dict.get("input_projection.0.weight")
+    if w is not None and hasattr(w, "shape") and len(w.shape) == 2:
+        hidden_dim = int(w.shape[0])
+
+    # Infer num_layers from LSTM parameter keys: lstm.weight_ih_l{k}
+    layer_idxs = []
+    for k in state_dict.keys():
+        m = re.match(r"lstm\.weight_ih_l(\d+)$", k)
+        if m:
+            layer_idxs.append(int(m.group(1)))
+    num_layers = (max(layer_idxs) + 1) if layer_idxs else 1
+
+    # Infer history_days from input_dim assuming extra features are sentiment(2) + vix(1)
+    extra_dim = 3
+    history_days = None
+    if input_dim > extra_dim and (input_dim - extra_dim) % 5 == 0:
+        history_days = int((input_dim - extra_dim) // 5)
+
+    return {
+        "input_dim": int(input_dim),
+        "hidden_dim": int(hidden_dim) if hidden_dim is not None else 256,
+        "num_layers": int(num_layers),
+        # Dropout has no parameters; pick a sane default for eval.
+        "dropout": 0.0,
+        "history_days": int(history_days) if history_days is not None else None,
+    }
+
+
 def load_model_and_scalers(model_path, scaler_X_path, scaler_y_path, input_dim, device='cpu'):
-    """Load trained model and scalers"""
+    """Load trained model + scalers, reconstructing architecture from checkpoint when available."""
     import pickle
     
-    # Load model
-    model = AdvancedStockPredictor(input_dim=input_dim)
     checkpoint = torch.load(model_path, map_location=device)
-    
-    if 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
+
+    # Load model weights (support both raw state_dict and dict checkpoints)
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        state_dict = checkpoint['model_state_dict']
+        model_kwargs = checkpoint.get('model_kwargs') or {}
     else:
-        model.load_state_dict(checkpoint)
+        state_dict = checkpoint
+        model_kwargs = {}
+
+    # Reconstruct model architecture
+    if not model_kwargs:
+        model_kwargs = _infer_model_kwargs_from_state_dict(state_dict, input_dim=input_dim)
+
+    history_days = model_kwargs.get('history_days')
+    if history_days is None or int(history_days) <= 0:
+        model = AdvancedStockPredictor(
+            input_dim=input_dim,
+            hidden_dim=int(model_kwargs.get('hidden_dim', 256)),
+            num_layers=int(model_kwargs.get('num_layers', 3)),
+            dropout=float(model_kwargs.get('dropout', 0.3)),
+        )
+    else:
+        model = AdvancedStockPredictor(
+            input_dim=input_dim,
+            hidden_dim=int(model_kwargs.get('hidden_dim', 256)),
+            num_layers=int(model_kwargs.get('num_layers', 3)),
+            dropout=float(model_kwargs.get('dropout', 0.3)),
+            history_days=int(history_days),
+        )
+
+    model.load_state_dict(state_dict)
     
     model = model.to(device)
     model.eval()
@@ -284,7 +341,7 @@ def main():
                        help='Path to saved feature scaler (default: data/checkpoints/<TICKER>/scaler_X.pkl)')
     parser.add_argument('--scaler-y', type=str, default=None,
                        help='Path to saved target scaler (default: data/checkpoints/<TICKER>/scaler_y.pkl)')
-    parser.add_argument('--days', type=int, default=200, help='Days of historical data')
+    parser.add_argument('--days', type=int, default=1825, help='Days of historical data')
     parser.add_argument('--output', type=str, default='data/evaluation_results.png',
                        help='Path to save evaluation plots')
     
