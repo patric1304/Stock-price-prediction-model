@@ -14,6 +14,10 @@ from src.config import (
     NEWS_HISTORY_DAYS,
 )
 
+
+class NewsAPIRateLimitError(RuntimeError):
+    pass
+
 # Cache directory
 CACHE_DIR = Path("data/raw/news_cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -49,6 +53,11 @@ def fetch_newsapi_headlines(query: str, from_date: str, to_date: str, page_size:
     }
     resp = requests.get(NEWSAPI_ENDPOINT, params=params)
     j = resp.json()
+
+    # Free-tier rate limiting typically returns HTTP 429 and/or code=rateLimited.
+    if resp.status_code == 429 or j.get("code") == "rateLimited":
+        raise NewsAPIRateLimitError(f"NewsAPI rate limit exceeded: {j}")
+
     if j.get("status") != "ok":
         print(f"[WARN] NewsAPI error for {query}: {j}")
         headlines = []
@@ -113,6 +122,8 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False):
             try:
                 company_news = fetch_newsapi_headlines(ticker, date_str, date_str)
                 comp_score = compute_sentiment_score(company_news)
+            except NewsAPIRateLimitError:
+                raise
             except Exception:
                 comp_score = 0.0
 
@@ -121,6 +132,8 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False):
                 try:
                     global_news = fetch_newsapi_headlines("global economy", date_str, date_str)
                     global_score = compute_sentiment_score(global_news)
+                except NewsAPIRateLimitError:
+                    raise
                 except Exception:
                     global_score = 0.0
 

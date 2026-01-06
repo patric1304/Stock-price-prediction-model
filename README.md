@@ -365,6 +365,8 @@ python scripts/run_pipeline.py --from-list --skip-existing
 
 # Same, but disable NewsAPI usage (recommended when training many tickers)
 python scripts/run_pipeline.py --from-list --skip-existing --disable-news
+
+Note: If you run with NewsAPI enabled and hit the free-tier rate limit, the batch runner will stop automatically. Re-run with `--disable-news` to continue training without news features.
 ```
 
 ### Hyperparameter Tuning

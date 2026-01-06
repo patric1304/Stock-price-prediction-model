@@ -10,12 +10,15 @@ import argparse
 import json
 from datetime import datetime
 
-from src.data_gathering import gather_data
+from src.data_gathering import gather_data, NewsAPIRateLimitError
 from src.train import train_model_advanced
 from src.model import AdvancedStockPredictor
 
 
-def main():
+NEWSAPI_RATE_LIMIT_EXIT_CODE = 42
+
+
+def main() -> int:
     parser = argparse.ArgumentParser(description='Train Advanced Stock Prediction Model')
     
     # Data arguments
@@ -88,9 +91,13 @@ def main():
         print(f"   Targets: {y.shape}")
         print(f"   Total samples: {len(X)}")
         print()
+    except NewsAPIRateLimitError as e:
+        print(f"[ERROR] {e}")
+        print("[ERROR] Stopping because NewsAPI free-tier rate limit was hit.")
+        return NEWSAPI_RATE_LIMIT_EXIT_CODE
     except Exception as e:
         print(f"[ERROR] Error gathering data: {e}")
-        return
+        return 1
     
     # Train model
     print("Starting training...")
@@ -194,7 +201,10 @@ def main():
         print(f"\n[ERROR] Training failed: {e}")
         import traceback
         traceback.print_exc()
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -42,9 +42,12 @@ def artifacts_exist(ticker: str, checkpoint_base: Path) -> bool:
     return (base / "best_model.pth").exists() and (base / "scaler_X.pkl").exists() and (base / "scaler_y.pkl").exists()
 
 
-def run(cmd: List[str], env: dict[str, str] | None = None) -> None:
+NEWSAPI_RATE_LIMIT_EXIT_CODE = 42
+
+
+def run(cmd: List[str], env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     print("\n$ " + " ".join(cmd))
-    subprocess.run(cmd, check=True, env=env)
+    return subprocess.run(cmd, check=False, env=env, text=True)
 
 
 def main() -> int:
@@ -126,8 +129,7 @@ def main() -> int:
             skipped.append(ticker)
             continue
 
-        try:
-            run(
+        train_proc = run(
                 [
                     sys.executable,
                     train_script,
@@ -155,9 +157,19 @@ def main() -> int:
                 env=env,
             )
 
-            if not args.no_eval:
-                out_png = str(root / "data" / f"{ticker}_eval.png")
-                run(
+        if train_proc.returncode == NEWSAPI_RATE_LIMIT_EXIT_CODE:
+            print("[STOP] NewsAPI rate limit detected. Stopping batch run.")
+            print("       Tip: re-run with --disable-news, or wait and try again later.")
+            failed.append(ticker)
+            break
+
+        if train_proc.returncode != 0:
+            failed.append(ticker)
+            continue
+
+        if not args.no_eval:
+            out_png = str(root / "data" / f"{ticker}_eval.png")
+            eval_proc = run(
                     [
                         sys.executable,
                         eval_script,
@@ -171,9 +183,11 @@ def main() -> int:
                     env=env,
                 )
 
-            ok.append(ticker)
-        except subprocess.CalledProcessError:
-            failed.append(ticker)
+            if eval_proc.returncode != 0:
+                failed.append(ticker)
+                continue
+
+        ok.append(ticker)
 
     print("\n" + "=" * 70)
     print("PIPELINE SUMMARY")
