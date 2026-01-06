@@ -63,6 +63,11 @@ def load_model_and_scalers(model_path, scaler_X_path, scaler_y_path, input_dim, 
     
     checkpoint = torch.load(model_path, map_location=device)
 
+    # target_mode may live at top-level (newer checkpoints) or be absent (older checkpoints)
+    target_mode = None
+    if isinstance(checkpoint, dict):
+        target_mode = checkpoint.get('target_mode')
+
     # Load model weights (support both raw state_dict and dict checkpoints)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         state_dict = checkpoint['model_state_dict']
@@ -103,10 +108,10 @@ def load_model_and_scalers(model_path, scaler_X_path, scaler_y_path, input_dim, 
     with open(scaler_y_path, 'rb') as f:
         scaler_y = pickle.load(f)
     
-    return model, scaler_X, scaler_y
+    return model, scaler_X, scaler_y, target_mode
 
 
-def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', batch_size=64):
+def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', batch_size=64, *, current_close=None, target_mode='price'):
     """
     Comprehensive model evaluation with multiple metrics
     """
@@ -134,20 +139,37 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
     predictions = np.array(all_predictions).flatten()
     targets = np.array(all_targets).flatten()
     
-    # Inverse transform to original scale
+    # Inverse transform to original scale (these are targets in "target_mode" space)
     predictions_original = scaler_y.inverse_transform(predictions.reshape(-1, 1)).flatten()
     targets_original = scaler_y.inverse_transform(targets.reshape(-1, 1)).flatten()
+
+    mode = (target_mode or 'price').strip().lower()
+    if mode not in {'price', 'delta'}:
+        mode = 'price'
+
+    # Convert into price space for metrics/plots (especially important for delta targets)
+    if mode == 'delta':
+        if current_close is None:
+            raise ValueError("current_close is required when evaluating delta targets")
+        cc = np.asarray(current_close, dtype=np.float32).reshape(-1)
+        if len(cc) != len(predictions_original):
+            raise ValueError(f"current_close length {len(cc)} != predictions length {len(predictions_original)}")
+        predictions_price = cc + predictions_original
+        targets_price = cc + targets_original
+    else:
+        predictions_price = predictions_original
+        targets_price = targets_original
     
     # Calculate metrics
-    mse = mean_squared_error(targets_original, predictions_original)
-    mae = mean_absolute_error(targets_original, predictions_original)
+    mse = mean_squared_error(targets_price, predictions_price)
+    mae = mean_absolute_error(targets_price, predictions_price)
     rmse = np.sqrt(mse)
-    r2 = r2_score(targets_original, predictions_original)
-    mape = np.mean(np.abs((targets_original - predictions_original) / targets_original)) * 100
+    r2 = r2_score(targets_price, predictions_price)
+    mape = np.mean(np.abs((targets_price - predictions_price) / np.maximum(np.abs(targets_price), 1e-8))) * 100
     
     # Directional accuracy (did we predict the right direction?)
-    actual_direction = np.diff(targets_original) > 0
-    pred_direction = np.diff(predictions_original) > 0
+    actual_direction = np.diff(targets_price) > 0
+    pred_direction = np.diff(predictions_price) > 0
     directional_accuracy = np.mean(actual_direction == pred_direction) * 100
     
     metrics = {
@@ -157,8 +179,9 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
         'r2': float(r2),
         'mape': float(mape),
         'directional_accuracy': float(directional_accuracy),
-        'predictions': predictions_original,
-        'targets': targets_original
+        'predictions': predictions_price,
+        'targets': targets_price,
+        'target_mode': mode,
     }
     
     return metrics
@@ -380,7 +403,7 @@ def main():
         )
 
     print("Loading model and scalers...")
-    model, scaler_X, scaler_y = load_model_and_scalers(
+    model, scaler_X, scaler_y, checkpoint_target_mode = load_model_and_scalers(
         model_path=str(model_path),
         scaler_X_path=str(scaler_x_path),
         scaler_y_path=str(scaler_y_path),
@@ -388,16 +411,33 @@ def main():
         device=device
     )
     print(f"Loaded from {default_dir}\n")
+
+    # If the checkpoint specifies a target mode, re-gather data to match it.
+    if checkpoint_target_mode:
+        desired_mode = str(checkpoint_target_mode).strip().lower()
+        if desired_mode in {'price', 'delta'}:
+            print(f"Checkpoint target mode: {desired_mode}")
+            X, y, meta = gather_data(ticker, days_back=args.days, return_meta=True, target_mode=desired_mode)
+            test_size = int(0.15 * len(X))
+            X_test = X[-test_size:]
+            y_test = y[-test_size:]
+            print(f"Rebuilt evaluation data for target mode '{desired_mode}'.")
+        else:
+            desired_mode = 'price'
+    else:
+        desired_mode = 'price'
     
     # Evaluate
     print("Evaluating model...")
     metrics = evaluate_model_comprehensive(
-        model, X_test, y_test, scaler_X, scaler_y, device
+        model, X_test, y_test, scaler_X, scaler_y, device,
+        current_close=meta['current_close'][-test_size:],
+        target_mode=desired_mode,
     )
 
     # Baseline (naive): predict next close equals current close
     baseline = evaluate_baseline_naive(
-        y_true=y_test,
+        y_true=metrics['targets'],
         current_close=meta['current_close'][-test_size:],
     )
     

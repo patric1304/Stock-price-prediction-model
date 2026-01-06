@@ -12,6 +12,7 @@ from src.config import (
     NEWSAPI_ENDPOINT,
     INCLUDE_GLOBAL_SENTIMENT,
     NEWS_HISTORY_DAYS,
+    TARGET_MODE,
 )
 
 
@@ -88,7 +89,7 @@ def compute_sentiment_score(headlines):
     return float(np.mean(scores))
 
 # Gather stock + VIX + sentiment + macro features
-def gather_data(ticker: str, days_back=60, return_meta: bool = False):
+def gather_data(ticker: str, days_back=60, return_meta: bool = False, target_mode: str | None = None):
     """
     Gather stock data with features (optimized for NewsAPI free tier).
     
@@ -100,6 +101,10 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False):
     Returns:
         X, y: Feature matrix and target values
     """
+    mode = (target_mode or TARGET_MODE or "price").strip().lower()
+    if mode not in {"price", "delta"}:
+        raise ValueError(f"Invalid target_mode={mode!r}. Expected 'price' or 'delta'.")
+
     end = datetime.today()
     start_stock = end - timedelta(days=days_back)
     start_news = end - timedelta(days=NEWS_HISTORY_DAYS)
@@ -167,13 +172,20 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False):
         market_vec = np.array([vix_value], dtype=np.float32).flatten()
         X_i = np.concatenate([window, sentiment_vec, market_vec])
 
+        # Target options:
+        # - price: next-day close
+        # - delta: next-day change relative to today's close
+        next_close = _close_scalar(i + 1)
+        current_close = _close_scalar(i)
+        y_val = next_close if mode == "price" else (next_close - current_close)
+
         # Always store target as shape (1,) so y becomes (N, 1) after np.array
-        y_i = np.float32(_close_scalar(i + 1))
+        y_i = np.float32(y_val)
         X.append(X_i)
         y.append([y_i])
 
         if return_meta:
-            meta["current_close"].append(_close_scalar(i))
+            meta["current_close"].append(current_close)
             meta["target_date"].append(df.index[i + 1].strftime("%Y-%m-%d"))
 
     X_arr = np.array(X, dtype=np.float32)

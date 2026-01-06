@@ -20,6 +20,7 @@ from datetime import datetime
 from src.data_gathering import gather_data, NewsAPIRateLimitError
 from src.train import train_model_advanced
 from src.model import AdvancedStockPredictor
+from src.config import TARGET_MODE
 
 
 NEWSAPI_RATE_LIMIT_EXIT_CODE = 42
@@ -67,6 +68,7 @@ def main() -> int:
     print(f"\nConfiguration:")
     print(f"  Ticker: {args.ticker}")
     print(f"  Historical Days: {args.days}")
+    print(f"  Target Mode: {TARGET_MODE}")
     print(f"  Model: LSTM + Attention + Residual")
     print(f"  Hidden Dim: {args.hidden_dim}")
     print(f"  LSTM Layers: {args.num_layers}")
@@ -125,6 +127,7 @@ def main() -> int:
             train_split=args.train_split,
             val_split=args.val_split,
             patience=args.patience,
+            target_mode=TARGET_MODE,
             use_gpu=use_gpu,
             checkpoint_dir=ticker_checkpoint_dir,
             verbose=True
@@ -195,9 +198,14 @@ def main() -> int:
         print(f"Final Training Loss: {history['train_loss'][-1]:.6f}")
         print(f"Final Validation Loss: {history['val_loss'][-1]:.6f}")
         print("\nTest Set Performance:")
-        print(f"  RMSE: ${test_metrics['rmse']:.2f}")
-        print(f"  MAE:  ${test_metrics['mae']:.2f}")
-        print(f"  MAPE: {test_metrics['mape']:.2f}%")
+        if (TARGET_MODE or "").strip().lower() == "delta":
+            print(f"  RMSE (delta): {test_metrics['rmse']:.4f}")
+            print(f"  MAE  (delta): {test_metrics['mae']:.4f}")
+            print(f"  MAPE (delta): {test_metrics['mape']:.2f}%")
+        else:
+            print(f"  RMSE: ${test_metrics['rmse']:.2f}")
+            print(f"  MAE:  ${test_metrics['mae']:.2f}")
+            print(f"  MAPE: {test_metrics['mape']:.2f}%")
         print("="*70)
         
         print(f"\n[SUCCESS] All artifacts saved to: {checkpoint_dir}")
