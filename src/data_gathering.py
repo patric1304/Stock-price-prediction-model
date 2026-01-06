@@ -147,6 +147,14 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False):
         "current_close": [],
         "target_date": [],
     }
+
+    def _close_scalar(idx: int) -> float:
+        close_val = df["Close"].iloc[idx]
+        # With yfinance multi-index columns, this can be a Series (even for one ticker)
+        if hasattr(close_val, "iloc"):
+            close_val = close_val.iloc[0]
+        return float(close_val)
+
     for i in range(HISTORY_DAYS, len(df)-1):
         window = df.iloc[i-HISTORY_DAYS:i][["Open","High","Low","Close","Volume"]].values.flatten()
         sentiment_vec = np.array(df.iloc[i][["sentiment_comp","sentiment_global"]], dtype=np.float32).flatten()
@@ -155,16 +163,19 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False):
             vix_value = 0.0
         market_vec = np.array([vix_value], dtype=np.float32).flatten()
         X_i = np.concatenate([window, sentiment_vec, market_vec])
-        y_i = np.float32(df.iloc[i+1]["Close"])
+
+        # Always store target as shape (1,) so y becomes (N, 1) after np.array
+        y_i = np.float32(_close_scalar(i + 1))
         X.append(X_i)
-        y.append(y_i)
+        y.append([y_i])
 
         if return_meta:
-            meta["current_close"].append(float(df.iloc[i]["Close"]))
+            meta["current_close"].append(_close_scalar(i))
             meta["target_date"].append(df.index[i + 1].strftime("%Y-%m-%d"))
 
     X_arr = np.array(X, dtype=np.float32)
-    y_arr = np.array(y, dtype=np.float32)
+    y_arr = np.array(y, dtype=np.float32)  # (N, 1)
+
     if return_meta:
         meta["current_close"] = np.array(meta["current_close"], dtype=np.float32)
         meta["target_date"] = np.array(meta["target_date"], dtype=object)
