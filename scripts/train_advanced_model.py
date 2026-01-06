@@ -3,9 +3,16 @@ Advanced Deep Learning Training Script
 Train the enhanced model with proper validation and regularization
 """
 
+import sys
+from pathlib import Path
+
+# Allow running this file directly via `python scripts/train_advanced_model.py`
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import torch
 import numpy as np
-from pathlib import Path
 import argparse
 import json
 from datetime import datetime

@@ -3,11 +3,18 @@ Enhanced Model Evaluation Script
 Provides comprehensive analysis of model performance
 """
 
+import sys
+from pathlib import Path
+
+# Allow running this file directly via `python scripts/evaluate_advanced_model.py`
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from pathlib import Path
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import json
 
