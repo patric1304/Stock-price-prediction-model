@@ -40,7 +40,7 @@ def main():
     # System arguments
     parser.add_argument('--no-gpu', action='store_true', help='Disable GPU usage')
     parser.add_argument('--checkpoint-dir', type=str, default='data/checkpoints', 
-                       help='Directory to save checkpoints')
+                       help='Base directory to save checkpoints (a per-ticker subfolder will be created)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     
     args = parser.parse_args()
@@ -97,6 +97,9 @@ def main():
     print("="*70)
     
     try:
+        # Save everything into a per-ticker directory to avoid overwriting
+        ticker_checkpoint_dir = str(Path(args.checkpoint_dir) / args.ticker.upper())
+
         model, history, scalers, test_metrics = train_model_advanced(
             X, y,
             epochs=args.epochs,
@@ -109,7 +112,7 @@ def main():
             val_split=args.val_split,
             patience=args.patience,
             use_gpu=use_gpu,
-            checkpoint_dir=args.checkpoint_dir,
+            checkpoint_dir=ticker_checkpoint_dir,
             verbose=True
         )
         
@@ -118,7 +121,7 @@ def main():
         print("="*70)
         
         # Save additional artifacts
-        checkpoint_dir = Path(args.checkpoint_dir)
+        checkpoint_dir = Path(ticker_checkpoint_dir)
         
         # Save scalers
         import pickle

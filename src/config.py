@@ -1,5 +1,7 @@
 # src/config.py
 
+import os
+
 # === GENERAL SETTINGS ===
 HISTORY_DAYS = 5  # Reduced from 20 to use less historical data
 COUNTRY_CODE = "US"
@@ -12,8 +14,8 @@ TRAINING_DATA_DAYS = 60   # Total days of stock data to fetch
 NEWS_HISTORY_DAYS = 20    # OPTIMIZED: Fetch 20 days of company news (3 weeks)
 
 # === API KEYS ===
-# NewsAPI.org key (you provided)
-NEWS_API_KEY = "c5f10cd6942f4917a04c5a8d41119d80"
+# NewsAPI.org key (load from environment; do not commit secrets)
+NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
 
 # === API ENDPOINTS ===
 NEWSAPI_ENDPOINT = "https://newsapi.org/v2/everything"

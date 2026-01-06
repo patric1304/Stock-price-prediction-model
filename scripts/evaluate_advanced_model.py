@@ -13,7 +13,6 @@ import json
 
 from src.model import AdvancedStockPredictor
 from src.data_gathering import gather_data
-from src.preprocessing import scale_features
 from src.dataset import StockDataset
 from torch.utils.data import DataLoader
 
@@ -99,6 +98,31 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
     }
     
     return metrics
+
+
+def evaluate_baseline_naive(current_close, next_close):
+    """Naive baseline: predict next close equals current close."""
+    y_pred = np.asarray(current_close, dtype=np.float32)
+    y_true = np.asarray(next_close, dtype=np.float32)
+
+    mse = mean_squared_error(y_true, y_pred)
+    mae = mean_absolute_error(y_true, y_pred)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(y_true, y_pred)
+    mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+
+    actual_direction = np.diff(y_true) > 0
+    pred_direction = np.diff(y_pred) > 0
+    directional_accuracy = np.mean(actual_direction == pred_direction) * 100
+
+    return {
+        'mse': float(mse),
+        'mae': float(mae),
+        'rmse': float(rmse),
+        'r2': float(r2),
+        'mape': float(mape),
+        'directional_accuracy': float(directional_accuracy),
+    }
 
 
 def plot_comprehensive_analysis(metrics, ticker, save_path=None):
@@ -234,8 +258,12 @@ def main():
     
     parser = argparse.ArgumentParser(description='Evaluate trained stock prediction model')
     parser.add_argument('--ticker', type=str, default='AAPL', help='Stock ticker')
-    parser.add_argument('--model', type=str, default='data/checkpoints/best_model.pth', 
-                       help='Path to model checkpoint')
+    parser.add_argument('--model', type=str, default=None,
+                       help='Path to model checkpoint (default: data/checkpoints/<TICKER>/best_model.pth)')
+    parser.add_argument('--scaler-x', type=str, default=None,
+                       help='Path to saved feature scaler (default: data/checkpoints/<TICKER>/scaler_X.pkl)')
+    parser.add_argument('--scaler-y', type=str, default=None,
+                       help='Path to saved target scaler (default: data/checkpoints/<TICKER>/scaler_y.pkl)')
     parser.add_argument('--days', type=int, default=200, help='Days of historical data')
     parser.add_argument('--output', type=str, default='data/evaluation_results.png',
                        help='Path to save evaluation plots')
@@ -247,8 +275,9 @@ def main():
     print(f"Using device: {device}\n")
     
     # Gather data
-    print(f"Gathering data for {args.ticker}...")
-    X, y = gather_data(args.ticker, days_back=args.days)
+    ticker = args.ticker.upper()
+    print(f"Gathering data for {ticker}...")
+    X, y, meta = gather_data(ticker, days_back=args.days, return_meta=True)
     print(f"Data shape: X={X.shape}, y={y.shape}\n")
     
     # For evaluation, we'll use the test split (last 15%)
@@ -257,31 +286,42 @@ def main():
     y_test = y[-test_size:]
     
     print(f"Evaluating on test set: {len(X_test)} samples\n")
-    
-    # Note: You'll need to save scalers during training to load them here
-    # For now, we'll create them from all data (not ideal - should use training scalers)
-    X_scaled, y_scaled, scaler_X, scaler_y = scale_features(X, y)
-    
-    # Load model
-    print("Loading model...")
-    model = AdvancedStockPredictor(input_dim=X.shape[1])
-    
-    if Path(args.model).exists():
-        checkpoint = torch.load(args.model, map_location=device)
-        if 'model_state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['model_state_dict'])
-        else:
-            model.load_state_dict(checkpoint)
-        model = model.to(device)
-        print(f"Model loaded from {args.model}\n")
-    else:
-        print(f"Warning: Model file not found at {args.model}")
-        print("Evaluating with random weights (for demonstration)\n")
+
+    # Resolve default artifact paths
+    default_dir = Path('data/checkpoints') / ticker
+    model_path = Path(args.model) if args.model else (default_dir / 'best_model.pth')
+    scaler_x_path = Path(args.scaler_x) if args.scaler_x else (default_dir / 'scaler_X.pkl')
+    scaler_y_path = Path(args.scaler_y) if args.scaler_y else (default_dir / 'scaler_y.pkl')
+
+    if not model_path.exists() or not scaler_x_path.exists() or not scaler_y_path.exists():
+        raise FileNotFoundError(
+            "Missing trained artifacts. Expected files:\n"
+            f"  Model:   {model_path}\n"
+            f"  ScalerX: {scaler_x_path}\n"
+            f"  ScalerY: {scaler_y_path}\n"
+            "Run training first: python scripts/train_advanced_model.py --ticker <TICKER>"
+        )
+
+    print("Loading model and scalers...")
+    model, scaler_X, scaler_y = load_model_and_scalers(
+        model_path=str(model_path),
+        scaler_X_path=str(scaler_x_path),
+        scaler_y_path=str(scaler_y_path),
+        input_dim=X.shape[1],
+        device=device
+    )
+    print(f"Loaded from {default_dir}\n")
     
     # Evaluate
     print("Evaluating model...")
     metrics = evaluate_model_comprehensive(
         model, X_test, y_test, scaler_X, scaler_y, device
+    )
+
+    # Baseline (naive): predict next close equals current close
+    baseline = evaluate_baseline_naive(
+        current_close=meta['current_close'][-test_size:],
+        next_close=y_test
     )
     
     # Print results
@@ -294,6 +334,11 @@ def main():
     print(f"R²:   {metrics['r2']:.4f}")
     print(f"MAPE: {metrics['mape']:.2f}%")
     print(f"Directional Accuracy: {metrics['directional_accuracy']:.2f}%")
+    print("\nBaseline (naive: next close = current close):")
+    print(f"  RMSE: ${baseline['rmse']:.4f}")
+    print(f"  MAE:  ${baseline['mae']:.4f}")
+    print(f"  MAPE: {baseline['mape']:.2f}%")
+    print(f"  Directional Accuracy: {baseline['directional_accuracy']:.2f}%")
     print("="*60 + "\n")
     
     # Plot results
@@ -304,6 +349,7 @@ def main():
     output_path = Path(args.output).parent / 'evaluation_metrics.json'
     metrics_to_save = {k: v for k, v in metrics.items() 
                        if k not in ['predictions', 'targets']}
+    metrics_to_save['baseline_naive'] = baseline
     with open(output_path, 'w') as f:
         json.dump(metrics_to_save, f, indent=2)
     print(f"\nMetrics saved to {output_path}")

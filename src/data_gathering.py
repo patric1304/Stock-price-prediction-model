@@ -6,7 +6,13 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from transformers import pipeline
-from src.config import HISTORY_DAYS, NEWS_API_KEY, NEWSAPI_ENDPOINT, INCLUDE_GLOBAL_SENTIMENT
+from src.config import (
+    HISTORY_DAYS,
+    NEWS_API_KEY,
+    NEWSAPI_ENDPOINT,
+    INCLUDE_GLOBAL_SENTIMENT,
+    NEWS_HISTORY_DAYS,
+)
 
 # Cache directory
 CACHE_DIR = Path("data/raw/news_cache")
@@ -26,6 +32,8 @@ def _get_sentiment_pipeline():
 
 # Fetch news with caching
 def fetch_newsapi_headlines(query: str, from_date: str, to_date: str, page_size: int = 20):
+    if not NEWS_API_KEY:
+        return []
     cache_file = CACHE_DIR / f"{query}_{from_date}_{to_date}.json"
     if cache_file.exists():
         with open(cache_file, "r", encoding="utf-8") as f:
@@ -71,7 +79,7 @@ def compute_sentiment_score(headlines):
     return float(np.mean(scores))
 
 # Gather stock + VIX + sentiment + macro features
-def gather_data(ticker: str, days_back=60):
+def gather_data(ticker: str, days_back=60, return_meta: bool = False):
     """
     Gather stock data with features (optimized for NewsAPI free tier).
     
@@ -85,8 +93,7 @@ def gather_data(ticker: str, days_back=60):
     """
     end = datetime.today()
     start_stock = end - timedelta(days=days_back)
-    NEWS_DAYS = 20  # OPTIMIZED: 20 days of news (3 weeks)
-    start_news = end - timedelta(days=NEWS_DAYS)
+    start_news = end - timedelta(days=NEWS_HISTORY_DAYS)
 
     df = yf.download(ticker, start=start_stock, end=end, progress=False, auto_adjust=False)
     if df.empty:
@@ -96,44 +103,57 @@ def gather_data(ticker: str, days_back=60):
 
     sentiments = []
     for dt in df.index:
-        date_str = dt.strftime("%Y-%m-%d")
-        if dt < start_news:
+        # Shift news sentiment by 1 day to reduce leakage from after-hours articles.
+        query_dt = dt - timedelta(days=1)
+        date_str = query_dt.strftime("%Y-%m-%d")
+
+        if query_dt < start_news:
             comp_score, global_score = 0.0, 0.0
         else:
             try:
                 company_news = fetch_newsapi_headlines(ticker, date_str, date_str)
                 comp_score = compute_sentiment_score(company_news)
-            except:
+            except Exception:
                 comp_score = 0.0
+
             global_score = 0.0
             if INCLUDE_GLOBAL_SENTIMENT:
                 try:
                     global_news = fetch_newsapi_headlines("global economy", date_str, date_str)
                     global_score = compute_sentiment_score(global_news)
-                except:
+                except Exception:
                     global_score = 0.0
+
         sentiments.append((comp_score, global_score))
     df["sentiment_comp"] = [s[0] for s in sentiments]
     df["sentiment_global"] = [s[1] for s in sentiments]
 
-    # Synthetic macro features
-    np.random.seed(42)
-    df["interest_rate"] = 5.0 + np.random.normal(0, 0.1, len(df))
-    df["inflation_rate"] = 2.5 + np.random.normal(0, 0.05, len(df))
-    df["gdp_growth"] = 1.8 + np.random.normal(0, 0.03, len(df))
-
     # Build dataset
     X, y = [], []
+    meta = {
+        "current_close": [],
+        "target_date": [],
+    }
     for i in range(HISTORY_DAYS, len(df)-1):
         window = df.iloc[i-HISTORY_DAYS:i][["Open","High","Low","Close","Volume"]].values.flatten()
         sentiment_vec = np.array(df.iloc[i][["sentiment_comp","sentiment_global"]], dtype=np.float32).flatten()
-        macro_vec = np.array(df.iloc[i][["interest_rate","inflation_rate","gdp_growth"]], dtype=np.float32).flatten()
         vix_value = df["vix_index"].iloc[i]
         if pd.isna(vix_value):
             vix_value = 0.0
         market_vec = np.array([vix_value], dtype=np.float32).flatten()
-        X_i = np.concatenate([window, sentiment_vec, macro_vec, market_vec])
+        X_i = np.concatenate([window, sentiment_vec, market_vec])
         y_i = np.float32(df.iloc[i+1]["Close"])
         X.append(X_i)
         y.append(y_i)
-    return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
+
+        if return_meta:
+            meta["current_close"].append(float(df.iloc[i]["Close"]))
+            meta["target_date"].append(df.index[i + 1].strftime("%Y-%m-%d"))
+
+    X_arr = np.array(X, dtype=np.float32)
+    y_arr = np.array(y, dtype=np.float32)
+    if return_meta:
+        meta["current_close"] = np.array(meta["current_close"], dtype=np.float32)
+        meta["target_date"] = np.array(meta["target_date"], dtype=object)
+        return X_arr, y_arr, meta
+    return X_arr, y_arr

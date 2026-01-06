@@ -63,11 +63,10 @@ pip install -r requirements.txt
 
 ## Configuration
 
-Update your NewsAPI key in `src/config.py`:
+Set your NewsAPI key via environment variable (do not commit secrets):
 
-```python
-NEWS_API_KEY = "your_newsapi_key_here"
-```
+- Windows (PowerShell): `setx NEWS_API_KEY "your_key_here"`
+- macOS/Linux (bash/zsh): `export NEWS_API_KEY="your_key_here"`
 
 Get a free key at: https://newsapi.org/
 
@@ -120,6 +119,7 @@ The training process will:
 5. Generate training report with metrics
 
 Saved artifacts in `data/checkpoints/`:
+Saved artifacts in `data/checkpoints/<TICKER>/`:
 - `best_model.pth` - Trained model weights
 - `scaler_X.pkl` - Feature scaler
 - `scaler_y.pkl` - Target scaler
@@ -138,7 +138,7 @@ python scripts/evaluate_advanced_model.py --ticker AAPL
 # Specify model path
 python scripts/evaluate_advanced_model.py \
     --ticker AAPL \
-    --model data/checkpoints/best_model.pth \
+    --model data/checkpoints/AAPL/best_model.pth \
     --output data/evaluation_results.png
 ```
 
@@ -230,13 +230,10 @@ Total Parameters: ~2.5M
 - Company-specific news sentiment
 - Market sentiment proxy
 
-### Macroeconomic Indicators (4 features)
-- Interest rates
-- Inflation rate
-- GDP growth
+### Market Volatility (1 feature)
 - VIX volatility index
 
-Total: 31 input features
+Total: 28 input features
 
 ## Performance Metrics
 

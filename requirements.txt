@@ -18,6 +18,9 @@ transformers>=4.30.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
 
+# Statistical plots (Q-Q plot)
+scipy>=1.10.0
+
 # Progress Bars
 tqdm>=4.65.0
 
