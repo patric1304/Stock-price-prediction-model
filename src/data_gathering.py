@@ -155,8 +155,11 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False):
             close_val = close_val.iloc[0]
         return float(close_val)
 
-    for i in range(HISTORY_DAYS, len(df)-1):
-        window = df.iloc[i-HISTORY_DAYS:i][["Open","High","Low","Close","Volume"]].values.flatten()
+    # Build samples for predicting next-day close (i+1) using information available at day i.
+    # Include day i in the OHLCV window so the model has access to the current close, matching the naive baseline.
+    for i in range(HISTORY_DAYS - 1, len(df) - 1):
+        start = i - (HISTORY_DAYS - 1)
+        window = df.iloc[start : i + 1][["Open", "High", "Low", "Close", "Volume"]].values.flatten()
         sentiment_vec = np.array(df.iloc[i][["sentiment_comp","sentiment_global"]], dtype=np.float32).flatten()
         vix_value = df["vix_index"].iloc[i]
         if pd.isna(vix_value):

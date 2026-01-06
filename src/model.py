@@ -123,8 +123,8 @@ class AdvancedStockPredictor(nn.Module):
         
         # Self-attention mechanism
         attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)  # [batch, HISTORY_DAYS, hidden_dim*2]
-        # Pool over time (mean) to produce a fixed-size representation
-        attn_out = attn_out.mean(dim=1)  # [batch, hidden_dim*2]
+        # Use the last timestep representation for next-step forecasting
+        attn_out = attn_out[:, -1, :]  # [batch, hidden_dim*2]
         
         # Residual blocks
         out = attn_out

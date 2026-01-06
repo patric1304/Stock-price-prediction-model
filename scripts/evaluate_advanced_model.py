@@ -107,28 +107,41 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
     return metrics
 
 
-def evaluate_baseline_naive(current_close, next_close):
-    """Naive baseline: predict next close equals current close."""
-    y_pred = np.asarray(current_close, dtype=np.float32)
-    y_true = np.asarray(next_close, dtype=np.float32)
+def evaluate_baseline_naive(y_true, current_close=None, **kwargs):
+    """
+    Naive baseline: predict next close as today's close (persistence).
+    Must handle y_true being shaped (N,) or (N,1).
+    """
+    # ---- normalize shapes to 1D ----
+    actual = np.asarray(y_true, dtype=np.float32).reshape(-1)
 
-    mse = mean_squared_error(y_true, y_pred)
-    mae = mean_absolute_error(y_true, y_pred)
-    rmse = np.sqrt(mse)
-    r2 = r2_score(y_true, y_pred)
-    mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+    if current_close is None:
+        # fallback: use naive persistence on actual itself (shifted)
+        pred = np.r_[actual[0], actual[:-1]]
+    else:
+        pred = np.asarray(current_close, dtype=np.float32).reshape(-1)
 
-    actual_direction = np.diff(y_true) > 0
-    pred_direction = np.diff(y_pred) > 0
-    directional_accuracy = np.mean(actual_direction == pred_direction) * 100
+    # ---- metrics (unchanged logic, but with 1D arrays) ----
+    mse = float(np.mean((pred - actual) ** 2))
+    mae = float(np.mean(np.abs(pred - actual)))
+    rmse = float(np.sqrt(mse))
+    mape = float(np.mean(np.abs((actual - pred) / np.maximum(np.abs(actual), 1e-8))) * 100)
+
+    # ---- directional accuracy (diff over time axis) ----
+    actual_direction = np.sign(np.diff(actual))          # (N-1,)
+    pred_direction = np.sign(np.diff(pred))              # (N-1,)
+
+    m = min(len(actual_direction), len(pred_direction))
+    directional_accuracy = float(np.mean(actual_direction[:m] == pred_direction[:m]) * 100) if m > 0 else 0.0
 
     return {
-        'mse': float(mse),
-        'mae': float(mae),
-        'rmse': float(rmse),
-        'r2': float(r2),
-        'mape': float(mape),
-        'directional_accuracy': float(directional_accuracy),
+        "mse": mse,
+        "mae": mae,
+        "rmse": rmse,
+        "mape": mape,
+        "directional_accuracy": directional_accuracy,
+        "pred": pred,
+        "actual": actual,
     }
 
 
@@ -327,8 +340,8 @@ def main():
 
     # Baseline (naive): predict next close equals current close
     baseline = evaluate_baseline_naive(
+        y_true=y_test,
         current_close=meta['current_close'][-test_size:],
-        next_close=y_test
     )
     
     # Print results

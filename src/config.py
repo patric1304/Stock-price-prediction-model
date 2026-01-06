@@ -3,7 +3,7 @@
 import os
 
 # === GENERAL SETTINGS ===
-HISTORY_DAYS = 5  # Reduced from 20 to use less historical data
+HISTORY_DAYS = 20  
 COUNTRY_CODE = "US"
 
 # === DATA COLLECTION SETTINGS ===
