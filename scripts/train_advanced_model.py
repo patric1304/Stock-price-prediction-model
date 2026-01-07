@@ -201,7 +201,10 @@ def main() -> int:
         if (TARGET_MODE or "").strip().lower() == "delta":
             print(f"  RMSE (delta): {test_metrics['rmse']:.4f}")
             print(f"  MAE  (delta): {test_metrics['mae']:.4f}")
-            print(f"  MAPE (delta): {test_metrics['mape']:.2f}%")
+            if test_metrics.get('mape') is None:
+                print("  MAPE (delta): N/A")
+            else:
+                print(f"  MAPE (delta): {test_metrics['mape']:.2f}%")
         else:
             print(f"  RMSE: ${test_metrics['rmse']:.2f}")
             print(f"  MAE:  ${test_metrics['mae']:.2f}")

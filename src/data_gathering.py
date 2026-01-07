@@ -146,6 +146,53 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False, target_mod
     df["sentiment_comp"] = [s[0] for s in sentiments]
     df["sentiment_global"] = [s[1] for s in sentiments]
 
+    # -------------------------------
+    # Leak-safe technical indicators
+    # -------------------------------
+    # All indicators are computed from values available up to the same day index.
+    close = df["Close"].copy()
+    if hasattr(close, "iloc") and isinstance(close.iloc[0], (pd.Series, pd.DataFrame)):
+        # yfinance sometimes returns multi-index columns even for a single ticker.
+        close = close.iloc[:, 0]
+
+    # Returns
+    df["ret_1"] = close.pct_change().fillna(0.0)
+    df["logret_1"] = np.log1p(df["ret_1"]).replace([np.inf, -np.inf], 0.0).fillna(0.0)
+
+    # Volatility (rolling std of daily returns)
+    df["vol_10"] = df["ret_1"].rolling(window=10, min_periods=2).std().fillna(0.0)
+
+    # RSI (14)
+    delta = close.diff().fillna(0.0)
+    gain = delta.clip(lower=0.0)
+    loss = (-delta).clip(lower=0.0)
+    avg_gain = gain.rolling(window=14, min_periods=2).mean()
+    avg_loss = loss.rolling(window=14, min_periods=2).mean()
+    rs = (avg_gain / (avg_loss.replace(0.0, np.nan))).replace([np.inf, -np.inf], np.nan)
+    df["rsi_14"] = (100.0 - (100.0 / (1.0 + rs))).fillna(50.0)
+
+    # Moving averages / EMA
+    df["sma_5"] = close.rolling(window=5, min_periods=2).mean().bfill().fillna(close)
+    df["sma_10"] = close.rolling(window=10, min_periods=2).mean().bfill().fillna(close)
+    df["ema_10"] = close.ewm(span=10, adjust=False).mean().fillna(close)
+
+    # MACD (12, 26) + signal (9)
+    ema_12 = close.ewm(span=12, adjust=False).mean()
+    ema_26 = close.ewm(span=26, adjust=False).mean()
+    macd = (ema_12 - ema_26).fillna(0.0)
+    macd_signal = macd.ewm(span=9, adjust=False).mean().fillna(0.0)
+    df["macd"] = macd
+    df["macd_signal"] = macd_signal
+    df["macd_hist"] = (macd - macd_signal).fillna(0.0)
+
+    # Bollinger Bands (20) - normalized position and band width
+    sma_20 = close.rolling(window=20, min_periods=2).mean()
+    std_20 = close.rolling(window=20, min_periods=2).std().replace(0.0, np.nan)
+    upper = sma_20 + 2.0 * std_20
+    lower = sma_20 - 2.0 * std_20
+    df["bb_width_20"] = ((upper - lower) / np.maximum(sma_20.abs(), 1e-8)).replace([np.inf, -np.inf], 0.0).fillna(0.0)
+    df["bb_pos_20"] = ((close - lower) / np.maximum((upper - lower), 1e-8)).replace([np.inf, -np.inf], 0.0).fillna(0.5)
+
     # Build dataset
     X, y = [], []
     meta = {
@@ -170,7 +217,27 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False, target_mod
         if pd.isna(vix_value):
             vix_value = 0.0
         market_vec = np.array([vix_value], dtype=np.float32).flatten()
-        X_i = np.concatenate([window, sentiment_vec, market_vec])
+
+        tech_vec = np.array(
+            df.iloc[i][
+                [
+                    "ret_1",
+                    "logret_1",
+                    "vol_10",
+                    "rsi_14",
+                    "sma_5",
+                    "sma_10",
+                    "ema_10",
+                    "macd",
+                    "macd_signal",
+                    "macd_hist",
+                    "bb_width_20",
+                    "bb_pos_20",
+                ]
+            ],
+            dtype=np.float32,
+        ).flatten()
+        X_i = np.concatenate([window, sentiment_vec, market_vec, tech_vec])
 
         # Target options:
         # - price: next-day close
