@@ -225,7 +225,7 @@ def evaluate_baseline_naive(y_true, current_close=None, **kwargs):
     }
 
 
-def plot_comprehensive_analysis(metrics, ticker, save_path=None):
+def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_naive=None):
     """Create comprehensive visualization of model performance"""
     
     predictions = metrics['predictions']
@@ -321,23 +321,32 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None):
     # 9. Metrics summary
     ax9 = plt.subplot(3, 3, 9)
     ax9.axis('off')
-    metrics_text = f"""
-    Performance Metrics
-    {'='*30}
-    
-    MSE:   ${metrics['mse']:.4f}
-    MAE:   ${metrics['mae']:.4f}
-    RMSE:  ${metrics['rmse']:.4f}
-    R²:    {metrics['r2']:.4f}
-    MAPE:  {metrics['mape']:.2f}%
-    
-    Directional Accuracy: {metrics['directional_accuracy']:.2f}%
-    
-    Min Error: ${errors.min():.2f}
-    Max Error: ${errors.max():.2f}
-    Mean Error: ${errors.mean():.2f}
-    Std Error: ${errors.std():.2f}
-    """
+    base_lines = ""
+    if baseline_naive is not None:
+        base_lines = (
+            "\nBaseline (naive: next close = current close)\n"
+            f"RMSE:  ${baseline_naive['rmse']:.4f}\n"
+            f"MAE:   ${baseline_naive['mae']:.4f}\n"
+            f"MAPE:  {baseline_naive['mape']:.2f}%\n"
+            f"DirAcc:{baseline_naive['directional_accuracy']:.2f}%\n"
+        )
+
+    metrics_text = (
+        "Performance Metrics\n"
+        + "=" * 30
+        + "\n\nModel\n"
+        f"RMSE:  ${metrics['rmse']:.4f}\n"
+        f"MAE:   ${metrics['mae']:.4f}\n"
+        f"MAPE:  {metrics['mape']:.2f}%\n"
+        f"R²:    {metrics['r2']:.4f}\n"
+        f"DirAcc:{metrics['directional_accuracy']:.2f}%\n"
+        + base_lines
+        + "\nErrors (model, $)\n"
+        f"Min:   ${errors.min():.2f}\n"
+        f"Max:   ${errors.max():.2f}\n"
+        f"Mean:  ${errors.mean():.2f}\n"
+        f"Std:   ${errors.std():.2f}\n"
+    )
     ax9.text(0.1, 0.5, metrics_text, fontsize=11, family='monospace',
              verticalalignment='center', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
     
@@ -460,16 +469,31 @@ def main():
     
     # Plot results
     print("Generating visualizations...")
-    plot_comprehensive_analysis(metrics, args.ticker, args.output)
+    plot_comprehensive_analysis(metrics, args.ticker, args.output, baseline_naive=baseline)
     
     # Save metrics to JSON
-    output_path = Path(args.output).parent / 'evaluation_metrics.json'
+    # Save per-ticker (avoids overwriting when evaluating multiple tickers)
+    output_path = default_dir / 'evaluation_metrics.json'
     metrics_to_save = {k: v for k, v in metrics.items() 
                        if k not in ['predictions', 'targets']}
-    metrics_to_save['baseline_naive'] = baseline
+    # Baseline includes numpy arrays (pred/actual) which are not JSON-serializable; keep only scalars.
+    metrics_to_save['baseline_naive'] = {
+        'mse': float(baseline.get('mse')),
+        'mae': float(baseline.get('mae')),
+        'rmse': float(baseline.get('rmse')),
+        'mape': float(baseline.get('mape')),
+        'directional_accuracy': float(baseline.get('directional_accuracy')),
+    }
     with open(output_path, 'w') as f:
         json.dump(metrics_to_save, f, indent=2)
     print(f"\nMetrics saved to {output_path}")
+
+    # Also write a copy next to the plot output for convenience
+    output_path_copy = Path(args.output).parent / 'evaluation_metrics.json'
+    if output_path_copy.resolve() != output_path.resolve():
+        with open(output_path_copy, 'w') as f:
+            json.dump(metrics_to_save, f, indent=2)
+        print(f"Metrics copy saved to {output_path_copy}")
 
 
 if __name__ == "__main__":

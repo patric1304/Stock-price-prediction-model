@@ -166,7 +166,8 @@ def train_model_advanced(
         print(f"  Trainable: {trainable_params:,}")
     
     # Loss function and optimizer
-    criterion = nn.MSELoss()
+    # Huber loss is typically more robust to price jumps/outliers than pure MSE.
+    criterion = nn.SmoothL1Loss(beta=1.0)
     optimizer = torch.optim.AdamW(
         model.parameters(), 
         lr=lr, 
@@ -302,14 +303,21 @@ def train_model_advanced(
     mse = np.mean((predictions_original - targets_original) ** 2)
     mae = np.mean(np.abs(predictions_original - targets_original))
     rmse = np.sqrt(mse)
-    mape = np.mean(np.abs((targets_original - predictions_original) / targets_original)) * 100
+
+    # MAPE is unstable/meaningless for delta targets because the true delta crosses 0.
+    mode = (target_mode or "price").strip().lower() if target_mode is not None else "price"
+    if mode == "delta":
+        mape = None
+    else:
+        denom = np.maximum(np.abs(targets_original), 1e-8)
+        mape = float(np.mean(np.abs((targets_original - predictions_original) / denom)) * 100)
     
     test_metrics = {
-        'test_loss': test_loss,
+        'test_loss': float(test_loss),
         'mse': float(mse),
         'mae': float(mae),
         'rmse': float(rmse),
-        'mape': float(mape)
+        'mape': mape,
     }
     
     if verbose:
@@ -320,7 +328,10 @@ def train_model_advanced(
         print(f"MSE:  {mse:.4f}")
         print(f"MAE:  {mae:.4f}")
         print(f"RMSE: {rmse:.4f}")
-        print(f"MAPE: {mape:.2f}%")
+        if mape is None:
+            print("MAPE: N/A (delta target)")
+        else:
+            print(f"MAPE: {mape:.2f}%")
     
     # Save training summary
     summary = {
