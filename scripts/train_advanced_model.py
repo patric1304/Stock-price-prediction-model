@@ -32,6 +32,7 @@ def main() -> int:
     # Data arguments
     parser.add_argument('--ticker', type=str, default='AAPL', help='Stock ticker symbol')
     parser.add_argument('--days', type=int, default=1825, help='Days of historical data to gather (default: 1825 = 5 years)')
+    parser.add_argument('--as-of', type=str, default=None, help='End date (YYYY-MM-DD) for data/news alignment (default: today)')
     
     # Model arguments (defaults tuned for this dataset size; medium model)
     parser.add_argument('--hidden-dim', type=int, default=128, help='Hidden dimension size')
@@ -68,6 +69,8 @@ def main() -> int:
     print(f"\nConfiguration:")
     print(f"  Ticker: {args.ticker}")
     print(f"  Historical Days: {args.days}")
+    if args.as_of:
+        print(f"  As-Of Date: {args.as_of}")
     print(f"  Target Mode: {TARGET_MODE}")
     print(f"  Model: LSTM + Attention + Residual")
     print(f"  Hidden Dim: {args.hidden_dim}")
@@ -94,7 +97,7 @@ def main() -> int:
     # Gather data
     print(f"Gathering data for {args.ticker}...")
     try:
-        X, y = gather_data(args.ticker, days_back=args.days)
+        X, y = gather_data(args.ticker, days_back=args.days, end_date=args.as_of)
         print(f"[SUCCESS] Data gathered successfully!")
         print(f"   Features: {X.shape}")
         print(f"   Targets: {y.shape}")

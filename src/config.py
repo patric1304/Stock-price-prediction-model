@@ -20,7 +20,8 @@ TARGET_MODE = os.getenv("TARGET_MODE", "delta")
 NEWS_DAYS_AVAILABLE = 30  # NewsAPI free tier only provides last 30 days
 MAX_DAILY_REQUESTS = 100  # NewsAPI free tier daily limit
 TRAINING_DATA_DAYS = 60   # Total days of stock data to fetch
-NEWS_HISTORY_DAYS = 20    # OPTIMIZED: Fetch 20 days of company news (3 weeks)
+# Default to 30 days because NewsAPI free tier typically supports up to the last 30 days.
+NEWS_HISTORY_DAYS = int(os.getenv("NEWS_HISTORY_DAYS", "30"))
 
 # === API KEYS ===
 # NewsAPI.org key (load from environment; do not commit secrets)

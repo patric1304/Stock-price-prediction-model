@@ -39,9 +39,15 @@ scripts/data/
 
 # Training artifacts (but keep configuration templates)
 data/evaluation_*.png
+data/*_eval*.png
+data/*eval*.png
+data/evaluation_results*.png
 data/evaluation_metrics.json
 data/architecture_*.png
 data/training_flow.png
+
+# Generated reports
+docs/*.pdf
 
 # Model files
 *.pth

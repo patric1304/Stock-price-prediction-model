@@ -37,12 +37,13 @@ def _get_sentiment_pipeline():
 
 # Fetch news with caching
 def fetch_newsapi_headlines(query: str, from_date: str, to_date: str, page_size: int = 20):
-    if not NEWS_API_KEY:
-        return []
     cache_file = CACHE_DIR / f"{query}_{from_date}_{to_date}.json"
     if cache_file.exists():
         with open(cache_file, "r", encoding="utf-8") as f:
             return json.load(f)
+
+    if not NEWS_API_KEY:
+        return []
     params = {
         "q": query,
         "from": from_date,
@@ -89,7 +90,13 @@ def compute_sentiment_score(headlines):
     return float(np.mean(scores))
 
 # Gather stock + VIX + sentiment + macro features
-def gather_data(ticker: str, days_back=60, return_meta: bool = False, target_mode: str | None = None):
+def gather_data(
+    ticker: str,
+    days_back=60,
+    return_meta: bool = False,
+    target_mode: str | None = None,
+    end_date: str | None = None,
+):
     """
     Gather stock data with features (optimized for NewsAPI free tier).
     
@@ -105,7 +112,7 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False, target_mod
     if mode not in {"price", "delta"}:
         raise ValueError(f"Invalid target_mode={mode!r}. Expected 'price' or 'delta'.")
 
-    end = datetime.today()
+    end = datetime.today() if not end_date else datetime.strptime(end_date, "%Y-%m-%d")
     start_stock = end - timedelta(days=days_back)
     start_news = end - timedelta(days=NEWS_HISTORY_DAYS)
 
@@ -121,9 +128,14 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False, target_mod
         query_dt = dt - timedelta(days=1)
         date_str = query_dt.strftime("%Y-%m-%d")
 
-        if query_dt < start_news:
-            comp_score, global_score = 0.0, 0.0
-        else:
+        # IMPORTANT:
+        # - We only live-fetch within the last NEWS_HISTORY_DAYS to respect free-tier limits.
+        # - But we still want to *use cached* headlines for older dates if they exist.
+        comp_score, global_score = 0.0, 0.0
+
+        company_cache_file = CACHE_DIR / f"{ticker}_{date_str}_{date_str}.json"
+        should_try_company = company_cache_file.exists() or (query_dt >= start_news)
+        if should_try_company:
             try:
                 company_news = fetch_newsapi_headlines(ticker, date_str, date_str)
                 comp_score = compute_sentiment_score(company_news)
@@ -132,8 +144,10 @@ def gather_data(ticker: str, days_back=60, return_meta: bool = False, target_mod
             except Exception:
                 comp_score = 0.0
 
-            global_score = 0.0
-            if INCLUDE_GLOBAL_SENTIMENT:
+        if INCLUDE_GLOBAL_SENTIMENT:
+            global_cache_file = CACHE_DIR / f"global economy_{date_str}_{date_str}.json"
+            should_try_global = global_cache_file.exists() or (query_dt >= start_news)
+            if should_try_global:
                 try:
                     global_news = fetch_newsapi_headlines("global economy", date_str, date_str)
                     global_score = compute_sentiment_score(global_news)

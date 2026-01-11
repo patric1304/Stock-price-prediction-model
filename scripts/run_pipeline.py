@@ -71,6 +71,7 @@ def main() -> int:
 
     # Training args (kept minimal; pass-through)
     parser.add_argument("--days", type=int, default=1825, help="Days of historical data")
+    parser.add_argument("--as-of", type=str, default=None, help="End date (YYYY-MM-DD) for data/news alignment (default: today)")
     parser.add_argument("--epochs", type=int, default=200, help="Max epochs")
     parser.add_argument("--batch-size", type=int, default=64, help="Batch size")
     parser.add_argument("--hidden-dim", type=int, default=128, help="Hidden dimension")
@@ -88,6 +89,17 @@ def main() -> int:
 
     parser.add_argument("--skip-existing", action="store_true", help="Skip tickers that already have artifacts")
     parser.add_argument("--disable-news", action="store_true", help="Disable NewsAPI usage (sets NEWS_API_KEY empty for this run)")
+    parser.add_argument(
+        "--prefetch-news",
+        action="store_true",
+        help="Warm NewsAPI cache before training (uses cache only if NEWS_API_KEY is unset)",
+    )
+    parser.add_argument(
+        "--news-max-requests",
+        type=int,
+        default=100000,
+        help="Budget for live NewsAPI requests during prefetch (default: 100000)",
+    )
     parser.add_argument("--no-eval", action="store_true", help="Train only (skip evaluation)")
 
     args = parser.parse_args()
@@ -114,6 +126,34 @@ def main() -> int:
     if args.disable_news:
         env["NEWS_API_KEY"] = ""
 
+    if not args.disable_news and not env.get("NEWS_API_KEY"):
+        print("[WARN] NEWS_API_KEY is not set. Training will use cached headlines only; missing cache => 0 sentiment.")
+
+    if args.prefetch_news and not args.disable_news:
+        prefetch_script = str(root / "scripts" / "prefetch_news_cache.py")
+        prefetch_cmd = [
+            sys.executable,
+            prefetch_script,
+            "--max-requests",
+            str(args.news_max_requests),
+        ]
+        if args.ticker:
+            prefetch_cmd += ["--ticker", args.ticker.upper()]
+        else:
+            prefetch_cmd += ["--from-list", "--tickers-file", str(root / args.tickers_file)]
+            if args.limit is not None:
+                prefetch_cmd += ["--limit", str(args.limit)]
+
+        if args.as_of:
+            prefetch_cmd += ["--as-of", str(args.as_of)]
+
+        prefetch_proc = run(prefetch_cmd, env=env)
+        if prefetch_proc.returncode == NEWSAPI_RATE_LIMIT_EXIT_CODE:
+            print("[STOP] NewsAPI rate limit detected during prefetch. Stopping.")
+            return NEWSAPI_RATE_LIMIT_EXIT_CODE
+        if prefetch_proc.returncode != 0:
+            print("[WARN] Prefetch returned non-zero; continuing with training anyway.")
+
     train_script = str(root / "scripts" / "train_advanced_model.py")
     eval_script = str(root / "scripts" / "evaluate_advanced_model.py")
 
@@ -137,6 +177,7 @@ def main() -> int:
                     ticker,
                     "--days",
                     str(args.days),
+                    *( ["--as-of", str(args.as_of)] if args.as_of else [] ),
                     "--epochs",
                     str(args.epochs),
                     "--batch-size",
@@ -177,6 +218,7 @@ def main() -> int:
                         ticker,
                         "--days",
                         str(args.days),
+                        *( ["--as-of", str(args.as_of)] if args.as_of else [] ),
                         "--output",
                         out_png,
                     ],
