@@ -374,6 +374,7 @@ def main():
     parser.add_argument('--scaler-y', type=str, default=None,
                        help='Path to saved target scaler (default: data/checkpoints/<TICKER>/scaler_y.pkl)')
     parser.add_argument('--days', type=int, default=1825, help='Days of historical data')
+    parser.add_argument('--as-of', type=str, default=None, help='End date (YYYY-MM-DD) for data/news alignment (default: today)')
     parser.add_argument('--output', type=str, default='data/evaluation_results.png',
                        help='Path to save evaluation plots')
     
@@ -386,7 +387,7 @@ def main():
     # Gather data
     ticker = args.ticker.upper()
     print(f"Gathering data for {ticker}...")
-    X, y, meta = gather_data(ticker, days_back=args.days, return_meta=True)
+    X, y, meta = gather_data(ticker, days_back=args.days, return_meta=True, end_date=args.as_of)
     print(f"Data shape: X={X.shape}, y={y.shape}\n")
     
     # For evaluation, we'll use the test split (last 15%)
@@ -426,7 +427,13 @@ def main():
         desired_mode = str(checkpoint_target_mode).strip().lower()
         if desired_mode in {'price', 'delta'}:
             print(f"Checkpoint target mode: {desired_mode}")
-            X, y, meta = gather_data(ticker, days_back=args.days, return_meta=True, target_mode=desired_mode)
+            X, y, meta = gather_data(
+                ticker,
+                days_back=args.days,
+                return_meta=True,
+                target_mode=desired_mode,
+                end_date=args.as_of,
+            )
             test_size = int(0.15 * len(X))
             X_test = X[-test_size:]
             y_test = y[-test_size:]
