@@ -8,12 +8,13 @@ COUNTRY_CODE = "US"
 
 # === TARGET SETTINGS ===
 #
-# "price": predict next-day close directly.
-# "delta": predict next-day change: close[t+1] - close[t].
+# "price":  predict next-day close directly.
+# "delta":  predict next-day change: close[t+1] - close[t].
+# "logret": predict next-day log return: ln(close[t+1] / close[t]).
 #
 # Delta targets often train more stably and avoid collapsing to a near-constant
 # mean price; evaluation converts deltas back into prices using close[t].
-TARGET_MODE = os.getenv("TARGET_MODE", "delta")
+TARGET_MODE = os.getenv("TARGET_MODE", "logret")
 
 # === DATA COLLECTION SETTINGS ===
 # NewsAPI free tier limitations

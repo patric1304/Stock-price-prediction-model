@@ -201,13 +201,11 @@ def main() -> int:
         print(f"Final Training Loss: {history['train_loss'][-1]:.6f}")
         print(f"Final Validation Loss: {history['val_loss'][-1]:.6f}")
         print("\nTest Set Performance:")
-        if (TARGET_MODE or "").strip().lower() == "delta":
-            print(f"  RMSE (delta): {test_metrics['rmse']:.4f}")
-            print(f"  MAE  (delta): {test_metrics['mae']:.4f}")
-            if test_metrics.get('mape') is None:
-                print("  MAPE (delta): N/A")
-            else:
-                print(f"  MAPE (delta): {test_metrics['mape']:.2f}%")
+        mode = (TARGET_MODE or "price").strip().lower()
+        if mode in {"delta", "logret"}:
+            print(f"  RMSE ({mode}): {test_metrics['rmse']:.4f}")
+            print(f"  MAE  ({mode}): {test_metrics['mae']:.4f}")
+            print(f"  MAPE ({mode}): N/A")
         else:
             print(f"  RMSE: ${test_metrics['rmse']:.2f}")
             print(f"  MAE:  ${test_metrics['mae']:.2f}")

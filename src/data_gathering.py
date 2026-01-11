@@ -109,8 +109,8 @@ def gather_data(
         X, y: Feature matrix and target values
     """
     mode = (target_mode or TARGET_MODE or "price").strip().lower()
-    if mode not in {"price", "delta"}:
-        raise ValueError(f"Invalid target_mode={mode!r}. Expected 'price' or 'delta'.")
+    if mode not in {"price", "delta", "logret"}:
+        raise ValueError(f"Invalid target_mode={mode!r}. Expected 'price', 'delta', or 'logret'.")
 
     end = datetime.today() if not end_date else datetime.strptime(end_date, "%Y-%m-%d")
     start_stock = end - timedelta(days=days_back)
@@ -254,11 +254,20 @@ def gather_data(
         X_i = np.concatenate([window, sentiment_vec, market_vec, tech_vec])
 
         # Target options:
-        # - price: next-day close
-        # - delta: next-day change relative to today's close
+        # - price:  next-day close
+        # - delta:  next-day change relative to today's close
+        # - logret: next-day log return ln(close[t+1] / close[t])
         next_close = _close_scalar(i + 1)
         current_close = _close_scalar(i)
-        y_val = next_close if mode == "price" else (next_close - current_close)
+
+        if mode == "price":
+            y_val = next_close
+        elif mode == "delta":
+            y_val = (next_close - current_close)
+        else:
+            # Log return. Prices should be positive; guard anyway.
+            denom = current_close if current_close > 0 else 1e-8
+            y_val = float(np.log(max(next_close, 1e-8) / denom))
 
         # Always store target as shape (1,) so y becomes (N, 1) after np.array
         y_i = np.float32(y_val)

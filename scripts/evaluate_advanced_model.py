@@ -41,11 +41,15 @@ def _infer_model_kwargs_from_state_dict(state_dict: dict, input_dim: int) -> dic
             layer_idxs.append(int(m.group(1)))
     num_layers = (max(layer_idxs) + 1) if layer_idxs else 1
 
-    # Infer history_days from input_dim assuming extra features are sentiment(2) + vix(1)
-    extra_dim = 3
+    # Infer history_days from input_dim.
+    # Feature layouts evolved over time; try a few known extra-dim hypotheses.
     history_days = None
-    if input_dim > extra_dim and (input_dim - extra_dim) % 5 == 0:
-        history_days = int((input_dim - extra_dim) // 5)
+    for extra_dim in (3, 15, 0):
+        if input_dim > extra_dim and (input_dim - extra_dim) % 5 == 0:
+            cand = int((input_dim - extra_dim) // 5)
+            if 2 <= cand <= 252:
+                history_days = cand
+                break
 
     return {
         "input_dim": int(input_dim),
@@ -144,18 +148,24 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
     targets_original = scaler_y.inverse_transform(targets.reshape(-1, 1)).flatten()
 
     mode = (target_mode or 'price').strip().lower()
-    if mode not in {'price', 'delta'}:
+    if mode not in {'price', 'delta', 'logret'}:
         mode = 'price'
 
-    # Convert into price space for metrics/plots (especially important for delta targets)
-    if mode == 'delta':
+    # Convert into price space for metrics/plots.
+    # For return-based targets we require current_close to reconstruct next close.
+    if mode in {'delta', 'logret'}:
         if current_close is None:
-            raise ValueError("current_close is required when evaluating delta targets")
+            raise ValueError("current_close is required when evaluating delta/logret targets")
         cc = np.asarray(current_close, dtype=np.float32).reshape(-1)
         if len(cc) != len(predictions_original):
             raise ValueError(f"current_close length {len(cc)} != predictions length {len(predictions_original)}")
-        predictions_price = cc + predictions_original
-        targets_price = cc + targets_original
+
+        if mode == 'delta':
+            predictions_price = cc + predictions_original
+            targets_price = cc + targets_original
+        else:
+            predictions_price = cc * np.exp(predictions_original)
+            targets_price = cc * np.exp(targets_original)
     else:
         predictions_price = predictions_original
         targets_price = targets_original
@@ -167,10 +177,17 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
     r2 = r2_score(targets_price, predictions_price)
     mape = np.mean(np.abs((targets_price - predictions_price) / np.maximum(np.abs(targets_price), 1e-8))) * 100
     
-    # Directional accuracy (did we predict the right direction?)
-    actual_direction = np.diff(targets_price) > 0
-    pred_direction = np.diff(predictions_price) > 0
-    directional_accuracy = np.mean(actual_direction == pred_direction) * 100
+    # Directional accuracy (did we predict UP/DOWN for next day?)
+    # Prefer using current_close alignment if available; fallback to diff over time.
+    if current_close is not None:
+        cc = np.asarray(current_close, dtype=np.float32).reshape(-1)
+        actual_up = (targets_price - cc) > 0
+        pred_up = (predictions_price - cc) > 0
+        directional_accuracy = float(np.mean(actual_up == pred_up) * 100)
+    else:
+        actual_direction = np.diff(targets_price) > 0
+        pred_direction = np.diff(predictions_price) > 0
+        directional_accuracy = float(np.mean(actual_direction == pred_direction) * 100)
     
     metrics = {
         'mse': float(mse),
@@ -188,31 +205,57 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
 
 
 def evaluate_baseline_naive(y_true, current_close=None, **kwargs):
+    """Naive baseline comparator.
+
+    In price-space the baseline is persistence: predict next close = current close.
+    If the model target was return-based, this corresponds to predicting a 0-return:
+    - delta:  0 delta
+    - logret: 0 log return
     """
-    Naive baseline: predict next close as today's close (persistence).
-    Must handle y_true being shaped (N,) or (N,1).
-    """
-    # ---- normalize shapes to 1D ----
+    # Normalize shapes to 1D
     actual = np.asarray(y_true, dtype=np.float32).reshape(-1)
 
-    if current_close is None:
-        # fallback: use naive persistence on actual itself (shifted)
-        pred = np.r_[actual[0], actual[:-1]]
-    else:
-        pred = np.asarray(current_close, dtype=np.float32).reshape(-1)
+    mode = (kwargs.get('target_mode') or 'price')
+    mode = str(mode).strip().lower()
+    if mode not in {'price', 'delta', 'logret'}:
+        mode = 'price'
 
-    # ---- metrics (unchanged logic, but with 1D arrays) ----
+    if current_close is None:
+        # Fallback: persistence using the actual series itself (shifted by 1)
+        pred = np.r_[actual[0], actual[:-1]]
+        cc = None
+    else:
+        cc = np.asarray(current_close, dtype=np.float32).reshape(-1)
+        # Defensive alignment (should usually already match)
+        n = min(len(actual), len(cc))
+        if n <= 0:
+            raise ValueError("Empty baseline inputs")
+        actual = actual[-n:]
+        cc = cc[-n:]
+        pred = cc
+
     mse = float(np.mean((pred - actual) ** 2))
     mae = float(np.mean(np.abs(pred - actual)))
     rmse = float(np.sqrt(mse))
     mape = float(np.mean(np.abs((actual - pred) / np.maximum(np.abs(actual), 1e-8))) * 100)
 
-    # ---- directional accuracy (diff over time axis) ----
-    actual_direction = np.sign(np.diff(actual))          # (N-1,)
-    pred_direction = np.sign(np.diff(pred))              # (N-1,)
+    # Directional accuracy: match the model metric (UP means next_close > current_close)
+    if cc is not None and len(cc) == len(actual):
+        actual_up = (actual - cc) > 0
+        pred_up = (pred - cc) > 0
+        directional_accuracy = float(np.mean(actual_up == pred_up) * 100)
+    else:
+        actual_direction = np.sign(np.diff(actual))
+        pred_direction = np.sign(np.diff(pred))
+        m = min(len(actual_direction), len(pred_direction))
+        directional_accuracy = float(np.mean(actual_direction[:m] == pred_direction[:m]) * 100) if m > 0 else 0.0
 
-    m = min(len(actual_direction), len(pred_direction))
-    directional_accuracy = float(np.mean(actual_direction[:m] == pred_direction[:m]) * 100) if m > 0 else 0.0
+    if mode == 'logret':
+        definition = "0 log return (equiv: next close = current close)"
+    elif mode == 'delta':
+        definition = "0 delta (equiv: next close = current close)"
+    else:
+        definition = "next close = current close"
 
     return {
         "mse": mse,
@@ -220,8 +263,7 @@ def evaluate_baseline_naive(y_true, current_close=None, **kwargs):
         "rmse": rmse,
         "mape": mape,
         "directional_accuracy": directional_accuracy,
-        "pred": pred,
-        "actual": actual,
+        "definition": definition,
     }
 
 
@@ -323,8 +365,9 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     ax9.axis('off')
     base_lines = ""
     if baseline_naive is not None:
+        baseline_label = baseline_naive.get('definition') or "next close = current close"
         base_lines = (
-            "\nBaseline (naive: next close = current close)\n"
+            f"\nBaseline ({baseline_label})\n"
             f"RMSE:  ${baseline_naive['rmse']:.4f}\n"
             f"MAE:   ${baseline_naive['mae']:.4f}\n"
             f"MAPE:  {baseline_naive['mape']:.2f}%\n"
@@ -425,7 +468,7 @@ def main():
     # If the checkpoint specifies a target mode, re-gather data to match it.
     if checkpoint_target_mode:
         desired_mode = str(checkpoint_target_mode).strip().lower()
-        if desired_mode in {'price', 'delta'}:
+        if desired_mode in {'price', 'delta', 'logret'}:
             print(f"Checkpoint target mode: {desired_mode}")
             X, y, meta = gather_data(
                 ticker,
@@ -455,6 +498,7 @@ def main():
     baseline = evaluate_baseline_naive(
         y_true=metrics['targets'],
         current_close=meta['current_close'][-test_size:],
+        target_mode=desired_mode,
     )
     
     # Print results
@@ -467,7 +511,7 @@ def main():
     print(f"R²:   {metrics['r2']:.4f}")
     print(f"MAPE: {metrics['mape']:.2f}%")
     print(f"Directional Accuracy: {metrics['directional_accuracy']:.2f}%")
-    print("\nBaseline (naive: next close = current close):")
+    print(f"\nBaseline ({baseline.get('definition', 'next close = current close')}):")
     print(f"  RMSE: ${baseline['rmse']:.4f}")
     print(f"  MAE:  ${baseline['mae']:.4f}")
     print(f"  MAPE: {baseline['mape']:.2f}%")
