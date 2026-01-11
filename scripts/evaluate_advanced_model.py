@@ -534,6 +534,7 @@ def main():
         'rmse': float(baseline.get('rmse')),
         'mape': float(baseline.get('mape')),
         'directional_accuracy': float(baseline.get('directional_accuracy')),
+        'definition': str(baseline.get('definition', 'next close = current close')),
     }
     with open(output_path, 'w') as f:
         json.dump(metrics_to_save, f, indent=2)
