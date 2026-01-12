@@ -33,6 +33,10 @@ scripts/data/
 *.csv
 *.h5
 
+# Data folder
+
+data/
+
 # Keep structure but ignore contents
 !data/checkpoints/.gitkeep
 !data/raw/news_cache/.gitkeep

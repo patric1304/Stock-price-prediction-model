@@ -304,9 +304,10 @@ def train_model_advanced(
     mae = np.mean(np.abs(predictions_original - targets_original))
     rmse = np.sqrt(mse)
 
-    # MAPE is unstable/meaningless for delta targets because the true delta crosses 0.
+    # MAPE is unstable/meaningless for delta/logret targets because the true values can cross 0
+    # and the unit is not price.
     mode = (target_mode or "price").strip().lower() if target_mode is not None else "price"
-    if mode == "delta":
+    if mode in {"delta", "logret"}:
         mape = None
     else:
         denom = np.maximum(np.abs(targets_original), 1e-8)
@@ -329,7 +330,7 @@ def train_model_advanced(
         print(f"MAE:  {mae:.4f}")
         print(f"RMSE: {rmse:.4f}")
         if mape is None:
-            print("MAPE: N/A (delta target)")
+            print(f"MAPE: N/A ({mode} target)")
         else:
             print(f"MAPE: {mape:.2f}%")
     
