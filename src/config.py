@@ -3,7 +3,7 @@
 import os
 
 # === GENERAL SETTINGS ===
-HISTORY_DAYS = 20  
+HISTORY_DAYS = 30
 COUNTRY_CODE = "US"
 
 # === TARGET SETTINGS ===
@@ -18,7 +18,7 @@ TARGET_MODE = os.getenv("TARGET_MODE", "logret")
 
 # === DATA COLLECTION SETTINGS ===
 # NewsAPI free tier limitations
-NEWS_DAYS_AVAILABLE = 30  # NewsAPI free tier only provides last 30 days
+NEWS_DAYS_AVAILABLE = 15  # NewsAPI free tier only provides last 30 days
 MAX_DAILY_REQUESTS = 100  # NewsAPI free tier daily limit
 TRAINING_DATA_DAYS = 60   # Total days of stock data to fetch
 # Default to 30 days because NewsAPI free tier typically supports up to the last 30 days.
