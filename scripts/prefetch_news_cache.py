@@ -140,6 +140,7 @@ def main() -> int:
 
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--ticker", type=str, help="Single ticker")
+    group.add_argument("--tickers", nargs="+", help="One or more tickers")
     group.add_argument("--from-list", action="store_true", help="Use config/stocks_to_train.txt")
 
     parser.add_argument("--tickers-file", type=str, default="config/stocks_to_train.txt")
@@ -160,6 +161,8 @@ def main() -> int:
     root = PROJECT_ROOT
     if args.ticker:
         tickers = [args.ticker.upper()]
+    elif args.tickers:
+        tickers = [t.strip().upper() for t in args.tickers if t.strip()]
     else:
         list_path = root / args.tickers_file
         if not list_path.exists():

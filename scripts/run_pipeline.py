@@ -122,6 +122,15 @@ def main() -> int:
     if args.limit is not None:
         tickers = tickers[: max(0, args.limit)]
 
+    # If requested, compute which tickers are actually going to run.
+    # This is used both for prefetch (so we don't spend requests on already-trained tickers)
+    # and to give a clearer UX.
+    tickers_to_process = tickers
+    if args.skip_existing:
+        tickers_to_process = [t for t in tickers if not artifacts_exist(t, checkpoint_base=checkpoint_base)]
+        if len(tickers_to_process) != len(tickers):
+            print(f"[INFO] skip-existing: {len(tickers) - len(tickers_to_process)} tickers already have artifacts")
+
     env = os.environ.copy()
     if args.disable_news:
         env["NEWS_API_KEY"] = ""
@@ -130,29 +139,30 @@ def main() -> int:
         print("[WARN] NEWS_API_KEY is not set. Training will use cached headlines only; missing cache => 0 sentiment.")
 
     if args.prefetch_news and not args.disable_news:
-        prefetch_script = str(root / "scripts" / "prefetch_news_cache.py")
-        prefetch_cmd = [
-            sys.executable,
-            prefetch_script,
-            "--max-requests",
-            str(args.news_max_requests),
-        ]
-        if args.ticker:
-            prefetch_cmd += ["--ticker", args.ticker.upper()]
+        if not tickers_to_process:
+            print("[INFO] Prefetch skipped: all selected tickers already have artifacts.")
         else:
-            prefetch_cmd += ["--from-list", "--tickers-file", str(root / args.tickers_file)]
-            if args.limit is not None:
-                prefetch_cmd += ["--limit", str(args.limit)]
+            prefetch_script = str(root / "scripts" / "prefetch_news_cache.py")
+            prefetch_cmd = [
+                sys.executable,
+                prefetch_script,
+                "--max-requests",
+                str(args.news_max_requests),
+            ]
+            if len(tickers_to_process) == 1:
+                prefetch_cmd += ["--ticker", tickers_to_process[0]]
+            else:
+                prefetch_cmd += ["--tickers", *tickers_to_process]
 
-        if args.as_of:
-            prefetch_cmd += ["--as-of", str(args.as_of)]
+            if args.as_of:
+                prefetch_cmd += ["--as-of", str(args.as_of)]
 
-        prefetch_proc = run(prefetch_cmd, env=env)
-        if prefetch_proc.returncode == NEWSAPI_RATE_LIMIT_EXIT_CODE:
-            print("[STOP] NewsAPI rate limit detected during prefetch. Stopping.")
-            return NEWSAPI_RATE_LIMIT_EXIT_CODE
-        if prefetch_proc.returncode != 0:
-            print("[WARN] Prefetch returned non-zero; continuing with training anyway.")
+            prefetch_proc = run(prefetch_cmd, env=env)
+            if prefetch_proc.returncode == NEWSAPI_RATE_LIMIT_EXIT_CODE:
+                print("[STOP] NewsAPI rate limit detected during prefetch. Stopping.")
+                return NEWSAPI_RATE_LIMIT_EXIT_CODE
+            if prefetch_proc.returncode != 0:
+                print("[WARN] Prefetch returned non-zero; continuing with training anyway.")
 
     train_script = str(root / "scripts" / "train_advanced_model.py")
     eval_script = str(root / "scripts" / "evaluate_advanced_model.py")
