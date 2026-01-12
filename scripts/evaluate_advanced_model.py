@@ -404,7 +404,7 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     plt.show()
 
 
-def main():
+def main() -> int:
     """Main evaluation pipeline"""
     import argparse
     
@@ -430,7 +430,15 @@ def main():
     # Gather data
     ticker = args.ticker.upper()
     print(f"Gathering data for {ticker}...")
-    X, y, meta = gather_data(ticker, days_back=args.days, return_meta=True, end_date=args.as_of)
+    try:
+        X, y, meta = gather_data(ticker, days_back=args.days, return_meta=True, end_date=args.as_of)
+    except ValueError as e:
+        print(f"[ERROR] {e}")
+        print("[HINT] yfinance sometimes times out. Re-run, or try a smaller --days, or set --as-of to a fixed date.")
+        return 1
+    except Exception as e:
+        print(f"[ERROR] Failed to gather data: {e}")
+        return 1
     print(f"Data shape: X={X.shape}, y={y.shape}\n")
     
     # For evaluation, we'll use the test split (last 15%)
@@ -441,19 +449,20 @@ def main():
     print(f"Evaluating on test set: {len(X_test)} samples\n")
 
     # Resolve default artifact paths
-    default_dir = Path('data/checkpoints') / ticker
+    default_dir = Path('data/checkpoints_logret') / ticker
     model_path = Path(args.model) if args.model else (default_dir / 'best_model.pth')
     scaler_x_path = Path(args.scaler_x) if args.scaler_x else (default_dir / 'scaler_X.pkl')
     scaler_y_path = Path(args.scaler_y) if args.scaler_y else (default_dir / 'scaler_y.pkl')
 
     if not model_path.exists() or not scaler_x_path.exists() or not scaler_y_path.exists():
-        raise FileNotFoundError(
+        print(
             "Missing trained artifacts. Expected files:\n"
             f"  Model:   {model_path}\n"
             f"  ScalerX: {scaler_x_path}\n"
             f"  ScalerY: {scaler_y_path}\n"
             "Run training first: python scripts/train_advanced_model.py --ticker <TICKER>"
         )
+        return 1
 
     print("Loading model and scalers...")
     model, scaler_X, scaler_y, checkpoint_target_mode = load_model_and_scalers(
@@ -547,6 +556,8 @@ def main():
             json.dump(metrics_to_save, f, indent=2)
         print(f"Metrics copy saved to {output_path_copy}")
 
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

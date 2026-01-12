@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import requests
 import json
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from transformers import pipeline
@@ -89,6 +90,43 @@ def compute_sentiment_score(headlines):
             scores.append(0.0)
     return float(np.mean(scores))
 
+
+def _yf_download_with_retry(
+    symbol: str,
+    *,
+    start: datetime,
+    end: datetime,
+    max_retries: int = 3,
+    sleep_seconds: float = 2.0,
+) -> pd.DataFrame:
+    """Download OHLCV data with simple retry/backoff.
+
+    yfinance occasionally returns empty dataframes on transient network issues
+    (timeouts, rate limiting, etc.). Retrying is usually enough.
+    """
+    last_df: pd.DataFrame | None = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            df = yf.download(
+                symbol,
+                start=start,
+                end=end,
+                progress=False,
+                auto_adjust=False,
+                threads=False,
+            )
+            last_df = df
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                return df
+        except Exception:
+            # Swallow and retry; the caller will decide how to handle final failure.
+            last_df = pd.DataFrame()
+
+        if attempt < max_retries:
+            time.sleep(sleep_seconds * attempt)
+
+    return last_df if last_df is not None else pd.DataFrame()
+
 # Gather stock + VIX + sentiment + macro features
 def gather_data(
     ticker: str,
@@ -116,11 +154,18 @@ def gather_data(
     start_stock = end - timedelta(days=days_back)
     start_news = end - timedelta(days=NEWS_HISTORY_DAYS)
 
-    df = yf.download(ticker, start=start_stock, end=end, progress=False, auto_adjust=False)
+    df = _yf_download_with_retry(ticker, start=start_stock, end=end, max_retries=4, sleep_seconds=2.0)
     if df.empty:
-        raise ValueError(f"No data found for {ticker}")
-    vix = yf.download("^VIX", start=start_stock, end=end, progress=False, auto_adjust=False)
-    df["vix_index"] = vix["Close"].reindex(df.index).ffill()
+        raise ValueError(
+            f"No data found for {ticker}. yfinance may have timed out; try re-running."
+        )
+
+    vix = _yf_download_with_retry("^VIX", start=start_stock, end=end, max_retries=3, sleep_seconds=2.0)
+    if isinstance(vix, pd.DataFrame) and (not vix.empty) and ("Close" in vix.columns):
+        df["vix_index"] = vix["Close"].reindex(df.index).ffill().fillna(0.0)
+    else:
+        # Don't fail the whole pipeline if VIX is temporarily unavailable.
+        df["vix_index"] = 0.0
 
     sentiments = []
     for dt in df.index:
