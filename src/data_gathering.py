@@ -20,11 +20,11 @@ from src.config import (
 class NewsAPIRateLimitError(RuntimeError):
     pass
 
-# Cache directory
+                 
 CACHE_DIR = Path("data/raw/news_cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-# Huggingface sentiment pipeline
+                                
 _sentiment_pipeline = None
 def _get_sentiment_pipeline():
     global _sentiment_pipeline
@@ -36,7 +36,7 @@ def _get_sentiment_pipeline():
         )
     return _sentiment_pipeline
 
-# Fetch news with caching
+                         
 def fetch_newsapi_headlines(query: str, from_date: str, to_date: str, page_size: int = 20):
     cache_file = CACHE_DIR / f"{query}_{from_date}_{to_date}.json"
     if cache_file.exists():
@@ -57,7 +57,7 @@ def fetch_newsapi_headlines(query: str, from_date: str, to_date: str, page_size:
     resp = requests.get(NEWSAPI_ENDPOINT, params=params)
     j = resp.json()
 
-    # Free-tier rate limiting typically returns HTTP 429 and/or code=rateLimited.
+                                                                                 
     if resp.status_code == 429 or j.get("code") == "rateLimited":
         raise NewsAPIRateLimitError(f"NewsAPI rate limit exceeded: {j}")
 
@@ -119,7 +119,7 @@ def _yf_download_with_retry(
             if isinstance(df, pd.DataFrame) and not df.empty:
                 return df
         except Exception:
-            # Swallow and retry; the caller will decide how to handle final failure.
+                                                                                    
             last_df = pd.DataFrame()
 
         if attempt < max_retries:
@@ -127,7 +127,7 @@ def _yf_download_with_retry(
 
     return last_df if last_df is not None else pd.DataFrame()
 
-# Gather stock + VIX + sentiment + macro features
+                                                 
 def gather_data(
     ticker: str,
     days_back=60,
@@ -164,18 +164,18 @@ def gather_data(
     if isinstance(vix, pd.DataFrame) and (not vix.empty) and ("Close" in vix.columns):
         df["vix_index"] = vix["Close"].reindex(df.index).ffill().fillna(0.0)
     else:
-        # Don't fail the whole pipeline if VIX is temporarily unavailable.
+                                                                          
         df["vix_index"] = 0.0
 
     sentiments = []
     for dt in df.index:
-        # Shift news sentiment by 1 day to reduce leakage from after-hours articles.
+                                                                                    
         query_dt = dt - timedelta(days=1)
         date_str = query_dt.strftime("%Y-%m-%d")
 
-        # IMPORTANT:
-        # - We only live-fetch within the last NEWS_HISTORY_DAYS to respect free-tier limits.
-        # - But we still want to *use cached* headlines for older dates if they exist.
+                    
+                                                                                             
+                                                                                      
         comp_score, global_score = 0.0, 0.0
 
         company_cache_file = CACHE_DIR / f"{ticker}_{date_str}_{date_str}.json"
@@ -205,23 +205,23 @@ def gather_data(
     df["sentiment_comp"] = [s[0] for s in sentiments]
     df["sentiment_global"] = [s[1] for s in sentiments]
 
-    # -------------------------------
-    # Leak-safe technical indicators
-    # -------------------------------
-    # All indicators are computed from values available up to the same day index.
+                                     
+                                    
+                                     
+                                                                                 
     close = df["Close"].copy()
     if hasattr(close, "iloc") and isinstance(close.iloc[0], (pd.Series, pd.DataFrame)):
-        # yfinance sometimes returns multi-index columns even for a single ticker.
+                                                                                  
         close = close.iloc[:, 0]
 
-    # Returns
+             
     df["ret_1"] = close.pct_change().fillna(0.0)
     df["logret_1"] = np.log1p(df["ret_1"]).replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
-    # Volatility (rolling std of daily returns)
+                                               
     df["vol_10"] = df["ret_1"].rolling(window=10, min_periods=2).std().fillna(0.0)
 
-    # RSI (14)
+              
     delta = close.diff().fillna(0.0)
     gain = delta.clip(lower=0.0)
     loss = (-delta).clip(lower=0.0)
@@ -230,12 +230,12 @@ def gather_data(
     rs = (avg_gain / (avg_loss.replace(0.0, np.nan))).replace([np.inf, -np.inf], np.nan)
     df["rsi_14"] = (100.0 - (100.0 / (1.0 + rs))).fillna(50.0)
 
-    # Moving averages / EMA
+                           
     df["sma_5"] = close.rolling(window=5, min_periods=2).mean().bfill().fillna(close)
     df["sma_10"] = close.rolling(window=10, min_periods=2).mean().bfill().fillna(close)
     df["ema_10"] = close.ewm(span=10, adjust=False).mean().fillna(close)
 
-    # MACD (12, 26) + signal (9)
+                                
     ema_12 = close.ewm(span=12, adjust=False).mean()
     ema_26 = close.ewm(span=26, adjust=False).mean()
     macd = (ema_12 - ema_26).fillna(0.0)
@@ -244,7 +244,7 @@ def gather_data(
     df["macd_signal"] = macd_signal
     df["macd_hist"] = (macd - macd_signal).fillna(0.0)
 
-    # Bollinger Bands (20) - normalized position and band width
+                                                               
     sma_20 = close.rolling(window=20, min_periods=2).mean()
     std_20 = close.rolling(window=20, min_periods=2).std().replace(0.0, np.nan)
     upper = sma_20 + 2.0 * std_20
@@ -252,7 +252,7 @@ def gather_data(
     df["bb_width_20"] = ((upper - lower) / np.maximum(sma_20.abs(), 1e-8)).replace([np.inf, -np.inf], 0.0).fillna(0.0)
     df["bb_pos_20"] = ((close - lower) / np.maximum((upper - lower), 1e-8)).replace([np.inf, -np.inf], 0.0).fillna(0.5)
 
-    # Build dataset
+                   
     X, y = [], []
     meta = {
         "current_close": [],
@@ -261,13 +261,13 @@ def gather_data(
 
     def _close_scalar(idx: int) -> float:
         close_val = df["Close"].iloc[idx]
-        # With yfinance multi-index columns, this can be a Series (even for one ticker)
+                                                                                       
         if hasattr(close_val, "iloc"):
             close_val = close_val.iloc[0]
         return float(close_val)
 
-    # Build samples for predicting next-day close (i+1) using information available at day i.
-    # Include day i in the OHLCV window so the model has access to the current close, matching the naive baseline.
+                                                                                             
+                                                                                                                  
     for i in range(HISTORY_DAYS - 1, len(df) - 1):
         start = i - (HISTORY_DAYS - 1)
         window = df.iloc[start : i + 1][["Open", "High", "Low", "Close", "Volume"]].values.flatten()
@@ -298,10 +298,10 @@ def gather_data(
         ).flatten()
         X_i = np.concatenate([window, sentiment_vec, market_vec, tech_vec])
 
-        # Target options:
-        # - price:  next-day close
-        # - delta:  next-day change relative to today's close
-        # - logret: next-day log return ln(close[t+1] / close[t])
+                         
+                                  
+                                                             
+                                                                 
         next_close = _close_scalar(i + 1)
         current_close = _close_scalar(i)
 
@@ -310,11 +310,11 @@ def gather_data(
         elif mode == "delta":
             y_val = (next_close - current_close)
         else:
-            # Log return. Prices should be positive; guard anyway.
+                                                                  
             denom = current_close if current_close > 0 else 1e-8
             y_val = float(np.log(max(next_close, 1e-8) / denom))
 
-        # Always store target as shape (1,) so y becomes (N, 1) after np.array
+                                                                              
         y_i = np.float32(y_val)
         X.append(X_i)
         y.append([y_i])
@@ -324,7 +324,7 @@ def gather_data(
             meta["target_date"].append(df.index[i + 1].strftime("%Y-%m-%d"))
 
     X_arr = np.array(X, dtype=np.float32)
-    y_arr = np.array(y, dtype=np.float32)  # (N, 1)
+    y_arr = np.array(y, dtype=np.float32)          
 
     if return_meta:
         meta["current_close"] = np.array(meta["current_close"], dtype=np.float32)

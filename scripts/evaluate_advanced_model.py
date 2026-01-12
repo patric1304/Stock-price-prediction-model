@@ -6,7 +6,7 @@ Provides comprehensive analysis of model performance
 import sys
 from pathlib import Path
 
-# Allow running this file directly via `python scripts/evaluate_advanced_model.py`
+                                                                                  
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -27,13 +27,13 @@ from torch.utils.data import DataLoader
 
 def _infer_model_kwargs_from_state_dict(state_dict: dict, input_dim: int) -> dict:
     """Best-effort reconstruction of model kwargs from a saved state_dict."""
-    # Infer hidden_dim from the first linear layer in input_projection
+                                                                      
     hidden_dim = None
     w = state_dict.get("input_projection.0.weight")
     if w is not None and hasattr(w, "shape") and len(w.shape) == 2:
         hidden_dim = int(w.shape[0])
 
-    # Infer num_layers from LSTM parameter keys: lstm.weight_ih_l{k}
+                                                                    
     layer_idxs = []
     for k in state_dict.keys():
         m = re.match(r"lstm\.weight_ih_l(\d+)$", k)
@@ -41,8 +41,8 @@ def _infer_model_kwargs_from_state_dict(state_dict: dict, input_dim: int) -> dic
             layer_idxs.append(int(m.group(1)))
     num_layers = (max(layer_idxs) + 1) if layer_idxs else 1
 
-    # Infer history_days from input_dim.
-    # Feature layouts evolved over time; try a few known extra-dim hypotheses.
+                                        
+                                                                              
     history_days = None
     for extra_dim in (3, 15, 0):
         if input_dim > extra_dim and (input_dim - extra_dim) % 5 == 0:
@@ -55,7 +55,7 @@ def _infer_model_kwargs_from_state_dict(state_dict: dict, input_dim: int) -> dic
         "input_dim": int(input_dim),
         "hidden_dim": int(hidden_dim) if hidden_dim is not None else 256,
         "num_layers": int(num_layers),
-        # Dropout has no parameters; pick a sane default for eval.
+                                                                  
         "dropout": 0.0,
         "history_days": int(history_days) if history_days is not None else None,
     }
@@ -67,12 +67,12 @@ def load_model_and_scalers(model_path, scaler_X_path, scaler_y_path, input_dim, 
     
     checkpoint = torch.load(model_path, map_location=device)
 
-    # target_mode may live at top-level (newer checkpoints) or be absent (older checkpoints)
+                                                                                            
     target_mode = None
     if isinstance(checkpoint, dict):
         target_mode = checkpoint.get('target_mode')
 
-    # Load model weights (support both raw state_dict and dict checkpoints)
+                                                                           
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         state_dict = checkpoint['model_state_dict']
         model_kwargs = checkpoint.get('model_kwargs') or {}
@@ -80,7 +80,7 @@ def load_model_and_scalers(model_path, scaler_X_path, scaler_y_path, input_dim, 
         state_dict = checkpoint
         model_kwargs = {}
 
-    # Reconstruct model architecture
+                                    
     if not model_kwargs:
         model_kwargs = _infer_model_kwargs_from_state_dict(state_dict, input_dim=input_dim)
 
@@ -106,7 +106,7 @@ def load_model_and_scalers(model_path, scaler_X_path, scaler_y_path, input_dim, 
     model = model.to(device)
     model.eval()
     
-    # Load scalers
+                  
     with open(scaler_X_path, 'rb') as f:
         scaler_X = pickle.load(f)
     with open(scaler_y_path, 'rb') as f:
@@ -119,15 +119,15 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
     """
     Comprehensive model evaluation with multiple metrics
     """
-    # Scale data
+                
     X_scaled = scaler_X.transform(X)
     y_scaled = scaler_y.transform(y.reshape(-1, 1))
     
-    # Create dataset and loader
+                               
     dataset = StockDataset(X_scaled, y_scaled)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     
-    # Get predictions
+                     
     model.eval()
     all_predictions = []
     all_targets = []
@@ -139,11 +139,11 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
             all_predictions.extend(y_pred.cpu().numpy())
             all_targets.extend(y_batch.numpy())
     
-    # Convert to numpy arrays
+                             
     predictions = np.array(all_predictions).flatten()
     targets = np.array(all_targets).flatten()
     
-    # Inverse transform to original scale (these are targets in "target_mode" space)
+                                                                                    
     predictions_original = scaler_y.inverse_transform(predictions.reshape(-1, 1)).flatten()
     targets_original = scaler_y.inverse_transform(targets.reshape(-1, 1)).flatten()
 
@@ -151,8 +151,8 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
     if mode not in {'price', 'delta', 'logret'}:
         mode = 'price'
 
-    # Convert into price space for metrics/plots.
-    # For return-based targets we require current_close to reconstruct next close.
+                                                 
+                                                                                  
     if mode in {'delta', 'logret'}:
         if current_close is None:
             raise ValueError("current_close is required when evaluating delta/logret targets")
@@ -170,15 +170,15 @@ def evaluate_model_comprehensive(model, X, y, scaler_X, scaler_y, device='cpu', 
         predictions_price = predictions_original
         targets_price = targets_original
     
-    # Calculate metrics
+                       
     mse = mean_squared_error(targets_price, predictions_price)
     mae = mean_absolute_error(targets_price, predictions_price)
     rmse = np.sqrt(mse)
     r2 = r2_score(targets_price, predictions_price)
     mape = np.mean(np.abs((targets_price - predictions_price) / np.maximum(np.abs(targets_price), 1e-8))) * 100
     
-    # Directional accuracy (did we predict UP/DOWN for next day?)
-    # Prefer using current_close alignment if available; fallback to diff over time.
+                                                                 
+                                                                                    
     if current_close is not None:
         cc = np.asarray(current_close, dtype=np.float32).reshape(-1)
         actual_up = (targets_price - cc) > 0
@@ -212,7 +212,7 @@ def evaluate_baseline_naive(y_true, current_close=None, **kwargs):
     - delta:  0 delta
     - logret: 0 log return
     """
-    # Normalize shapes to 1D
+                            
     actual = np.asarray(y_true, dtype=np.float32).reshape(-1)
 
     mode = (kwargs.get('target_mode') or 'price')
@@ -221,12 +221,12 @@ def evaluate_baseline_naive(y_true, current_close=None, **kwargs):
         mode = 'price'
 
     if current_close is None:
-        # Fallback: persistence using the actual series itself (shifted by 1)
+                                                                             
         pred = np.r_[actual[0], actual[:-1]]
         cc = None
     else:
         cc = np.asarray(current_close, dtype=np.float32).reshape(-1)
-        # Defensive alignment (should usually already match)
+                                                            
         n = min(len(actual), len(cc))
         if n <= 0:
             raise ValueError("Empty baseline inputs")
@@ -239,7 +239,7 @@ def evaluate_baseline_naive(y_true, current_close=None, **kwargs):
     rmse = float(np.sqrt(mse))
     mape = float(np.mean(np.abs((actual - pred) / np.maximum(np.abs(actual), 1e-8))) * 100)
 
-    # Directional accuracy: match the model metric (UP means next_close > current_close)
+                                                                                        
     if cc is not None and len(cc) == len(actual):
         actual_up = (actual - cc) > 0
         pred_up = (pred - cc) > 0
@@ -275,7 +275,7 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     
     fig = plt.figure(figsize=(18, 12))
     
-    # 1. Time series comparison
+                               
     ax1 = plt.subplot(3, 3, 1)
     plt.plot(targets, label='Actual', linewidth=2, alpha=0.8)
     plt.plot(predictions, label='Predicted', linewidth=2, alpha=0.8)
@@ -285,7 +285,7 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     plt.legend(fontsize=10)
     plt.grid(True, alpha=0.3)
     
-    # 2. Scatter plot with perfect prediction line
+                                                  
     ax2 = plt.subplot(3, 3, 2)
     plt.scatter(targets, predictions, alpha=0.5, s=30)
     min_val = min(targets.min(), predictions.min())
@@ -297,7 +297,7 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     plt.legend(fontsize=10)
     plt.grid(True, alpha=0.3)
     
-    # 3. Residual plot
+                      
     ax3 = plt.subplot(3, 3, 3)
     residuals = predictions - targets
     plt.scatter(predictions, residuals, alpha=0.5, s=30)
@@ -307,7 +307,7 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     plt.title('Residual Analysis', fontsize=12, fontweight='bold')
     plt.grid(True, alpha=0.3)
     
-    # 4. Error distribution
+                           
     ax4 = plt.subplot(3, 3, 4)
     errors = targets - predictions
     plt.hist(errors, bins=50, edgecolor='black', alpha=0.7)
@@ -317,7 +317,7 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     plt.title('Error Distribution', fontsize=12, fontweight='bold')
     plt.grid(True, alpha=0.3, axis='y')
     
-    # 5. Percentage error
+                         
     ax5 = plt.subplot(3, 3, 5)
     percentage_errors = (errors / targets) * 100
     plt.hist(percentage_errors, bins=50, edgecolor='black', alpha=0.7, color='orange')
@@ -327,14 +327,14 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     plt.title('Percentage Error Distribution', fontsize=12, fontweight='bold')
     plt.grid(True, alpha=0.3, axis='y')
     
-    # 6. Q-Q plot for residual normality
+                                        
     ax6 = plt.subplot(3, 3, 6)
     from scipy import stats
     stats.probplot(residuals, dist="norm", plot=plt)
     plt.title('Q-Q Plot (Residual Normality)', fontsize=12, fontweight='bold')
     plt.grid(True, alpha=0.3)
     
-    # 7. Prediction error over time
+                                   
     ax7 = plt.subplot(3, 3, 7)
     abs_errors = np.abs(errors)
     plt.plot(abs_errors, linewidth=1.5, color='red', alpha=0.7)
@@ -343,7 +343,7 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     plt.title('Prediction Error Over Time', fontsize=12, fontweight='bold')
     plt.grid(True, alpha=0.3)
     
-    # 8. Directional accuracy
+                             
     ax8 = plt.subplot(3, 3, 8)
     actual_changes = np.diff(targets)
     pred_changes = np.diff(predictions)
@@ -360,7 +360,7 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     plt.legend(fontsize=10)
     plt.grid(True, alpha=0.3)
     
-    # 9. Metrics summary
+                        
     ax9 = plt.subplot(3, 3, 9)
     ax9.axis('off')
     base_lines = ""
@@ -423,11 +423,11 @@ def main() -> int:
     
     args = parser.parse_args()
     
-    # Setup device
+                  
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}\n")
     
-    # Gather data
+                 
     ticker = args.ticker.upper()
     print(f"Gathering data for {ticker}...")
     try:
@@ -441,14 +441,14 @@ def main() -> int:
         return 1
     print(f"Data shape: X={X.shape}, y={y.shape}\n")
     
-    # For evaluation, we'll use the test split (last 15%)
+                                                         
     test_size = int(0.15 * len(X))
     X_test = X[-test_size:]
     y_test = y[-test_size:]
     
     print(f"Evaluating on test set: {len(X_test)} samples\n")
 
-    # Resolve default artifact paths
+                                    
     default_dir = Path('data/checkpoints_logret') / ticker
     model_path = Path(args.model) if args.model else (default_dir / 'best_model.pth')
     scaler_x_path = Path(args.scaler_x) if args.scaler_x else (default_dir / 'scaler_X.pkl')
@@ -474,7 +474,7 @@ def main() -> int:
     )
     print(f"Loaded from {default_dir}\n")
 
-    # If the checkpoint specifies a target mode, re-gather data to match it.
+                                                                            
     if checkpoint_target_mode:
         desired_mode = str(checkpoint_target_mode).strip().lower()
         if desired_mode in {'price', 'delta', 'logret'}:
@@ -495,7 +495,7 @@ def main() -> int:
     else:
         desired_mode = 'price'
     
-    # Evaluate
+              
     print("Evaluating model...")
     metrics = evaluate_model_comprehensive(
         model, X_test, y_test, scaler_X, scaler_y, device,
@@ -503,14 +503,14 @@ def main() -> int:
         target_mode=desired_mode,
     )
 
-    # Baseline (naive): predict next close equals current close
+                                                               
     baseline = evaluate_baseline_naive(
         y_true=metrics['targets'],
         current_close=meta['current_close'][-test_size:],
         target_mode=desired_mode,
     )
     
-    # Print results
+                   
     print("\n" + "="*60)
     print("EVALUATION RESULTS")
     print("="*60)
@@ -527,16 +527,16 @@ def main() -> int:
     print(f"  Directional Accuracy: {baseline['directional_accuracy']:.2f}%")
     print("="*60 + "\n")
     
-    # Plot results
+                  
     print("Generating visualizations...")
     plot_comprehensive_analysis(metrics, args.ticker, args.output, baseline_naive=baseline)
     
-    # Save metrics to JSON
-    # Save per-ticker (avoids overwriting when evaluating multiple tickers)
+                          
+                                                                           
     output_path = default_dir / 'evaluation_metrics.json'
     metrics_to_save = {k: v for k, v in metrics.items() 
                        if k not in ['predictions', 'targets']}
-    # Baseline includes numpy arrays (pred/actual) which are not JSON-serializable; keep only scalars.
+                                                                                                      
     metrics_to_save['baseline_naive'] = {
         'mse': float(baseline.get('mse')),
         'mae': float(baseline.get('mae')),
@@ -549,7 +549,7 @@ def main() -> int:
         json.dump(metrics_to_save, f, indent=2)
     print(f"\nMetrics saved to {output_path}")
 
-    # Also write a copy next to the plot output for convenience
+                                                               
     output_path_copy = Path(args.output).parent / 'evaluation_metrics.json'
     if output_path_copy.resolve() != output_path.resolve():
         with open(output_path_copy, 'w') as f:

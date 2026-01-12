@@ -69,7 +69,7 @@ def main() -> int:
     )
     parser.add_argument("--limit", type=int, default=None, help="Only process first N tickers from the list")
 
-    # Training args (kept minimal; pass-through)
+                                                
     parser.add_argument("--days", type=int, default=1825, help="Days of historical data")
     parser.add_argument("--as-of", type=str, default=None, help="End date (YYYY-MM-DD) for data/news alignment (default: today)")
     parser.add_argument("--epochs", type=int, default=200, help="Max epochs")
@@ -110,7 +110,7 @@ def main() -> int:
     if args.ticker:
         tickers = [args.ticker.upper()]
     else:
-        # Default to list mode if no ticker provided (coursework convenience)
+                                                                             
         if not args.from_list:
             args.from_list = True
         list_path = root / args.tickers_file
@@ -122,9 +122,9 @@ def main() -> int:
     if args.limit is not None:
         tickers = tickers[: max(0, args.limit)]
 
-    # If requested, compute which tickers are actually going to run.
-    # This is used both for prefetch (so we don't spend requests on already-trained tickers)
-    # and to give a clearer UX.
+                                                                    
+                                                                                            
+                               
     tickers_to_process = tickers
     if args.skip_existing:
         tickers_to_process = [t for t in tickers if not artifacts_exist(t, checkpoint_base=checkpoint_base)]

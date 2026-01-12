@@ -7,7 +7,7 @@ import sys
 import argparse
 from pathlib import Path
 
-# Add parent directory to path
+                              
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.train_advanced_model import main as train_main
@@ -29,7 +29,7 @@ def load_stocks_list(file_path='config/stocks_to_train.txt'):
         with open(file_path, 'r') as f:
             for line in f:
                 line = line.strip()
-                # Skip empty lines and comments
+                                               
                 if line and not line.startswith('#'):
                     stocks.append(line.upper())
         return stocks
@@ -60,7 +60,7 @@ def train_stock(ticker, force=False, skip_existing=False, **kwargs):
                 print("[SKIPPED] Training cancelled.")
                 return False
     
-    # Build arguments for training
+                                  
     args = ['--ticker', ticker]
     
     if 'epochs' in kwargs and kwargs['epochs']:
@@ -70,17 +70,17 @@ def train_stock(ticker, force=False, skip_existing=False, **kwargs):
     if 'learning_rate' in kwargs and kwargs['learning_rate']:
         args.extend(['--lr', str(kwargs['learning_rate'])])
     
-    # Call training by modifying sys.argv
+                                         
     print(f"\n[TRAINING] Starting training for {ticker}...")
     
-    # Save original sys.argv
+                            
     original_argv = sys.argv.copy()
     
     try:
-        # Set new sys.argv for the training script
+                                                  
         sys.argv = ['train_advanced_model.py'] + args
         
-        # Call training
+                       
         train_main()
         
         print(f"[SUCCESS] Training completed for {ticker}\n")
@@ -89,7 +89,7 @@ def train_stock(ticker, force=False, skip_existing=False, **kwargs):
         print(f"[ERROR] Training failed for {ticker}: {str(e)}\n")
         return False
     finally:
-        # Always restore original sys.argv
+                                          
         sys.argv = original_argv
 
 
@@ -121,7 +121,7 @@ def train_from_list(stocks_file='config/stocks_to_train.txt', skip_existing=True
         else:
             results['failed'].append(ticker)
     
-    # Summary
+             
     print(f"\n{'='*60}")
     print("TRAINING SUMMARY")
     print(f"{'='*60}")
@@ -159,7 +159,7 @@ Examples:
         """
     )
     
-    # Main arguments
+                    
     parser.add_argument('ticker', type=str, nargs='?', 
                        help='Stock ticker symbol (e.g., AAPL) - not needed with --from-list')
     parser.add_argument('--from-list', action='store_true',
@@ -167,12 +167,12 @@ Examples:
     parser.add_argument('--stocks-file', type=str, default='config/stocks_to_train.txt',
                        help='Path to stocks list file (default: config/stocks_to_train.txt)')
     
-    # Training options
+                      
     parser.add_argument('--epochs', type=int, help='Number of training epochs (default: 100)')
     parser.add_argument('--batch-size', type=int, help='Batch size (default: 32)')
     parser.add_argument('--learning-rate', type=float, help='Learning rate (default: 0.001)')
     
-    # Safety options
+                    
     parser.add_argument('--force', action='store_true', 
                        help='Force re-training without confirmation (single ticker only)')
     parser.add_argument('--retrain', action='store_true',
@@ -180,9 +180,9 @@ Examples:
     
     args = parser.parse_args()
     
-    # Validate arguments
+                        
     if args.from_list:
-        # Train from list
+                         
         skip_existing = not args.retrain
         train_from_list(
             stocks_file=args.stocks_file,
@@ -192,7 +192,7 @@ Examples:
             learning_rate=args.learning_rate
         )
     elif args.ticker:
-        # Train single ticker
+                             
         train_stock(
             args.ticker,
             force=args.force,

@@ -23,7 +23,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Allow running this file directly via `python scripts/analyze_news_correlation.py`
+                                                                                   
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -71,7 +71,7 @@ def build_dataset(ticker: str, start: str, end: str) -> pd.DataFrame:
     start_dt = _parse_date(start)
     end_dt = _parse_date(end)
 
-    # Pull prices; extend by one day so next-day label exists.
+                                                              
     price_start = start_dt - timedelta(days=5)
     price_end = end_dt + timedelta(days=5)
     df = yf.download(ticker, start=price_start, end=price_end, progress=False, auto_adjust=False)
@@ -86,7 +86,7 @@ def build_dataset(ticker: str, start: str, end: str) -> pd.DataFrame:
 
     rows: list[DayRow] = []
     for dt in trading_days:
-        # Need next trading day's close for label
+                                                 
         try:
             i = df.index.get_loc(dt)
         except KeyError:

@@ -23,13 +23,13 @@ class AdvancedStockPredictor(nn.Module):
         self.hidden_dim = hidden_dim
         self.history_days = int(history_days)
 
-        # We expect the first HISTORY_DAYS * 5 features to be the OHLCV window.
+                                                                               
         self.price_features_per_day = 5
         self.window_dim = self.history_days * self.price_features_per_day
         self.extra_dim = max(0, self.input_dim - self.window_dim)
         self.per_step_input_dim = self.price_features_per_day + self.extra_dim
         
-        # Input projection layer (per-timestep)
+                                               
         self.input_projection = nn.Sequential(
             nn.Linear(self.per_step_input_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
@@ -37,7 +37,7 @@ class AdvancedStockPredictor(nn.Module):
             nn.Dropout(dropout)
         )
         
-        # LSTM for temporal dependencies (assuming sequential features)
+                                                                       
         self.lstm = nn.LSTM(
             hidden_dim, 
             hidden_dim, 
@@ -47,20 +47,20 @@ class AdvancedStockPredictor(nn.Module):
             bidirectional=True
         )
         
-        # Attention mechanism for feature importance
+                                                    
         self.attention = nn.MultiheadAttention(
-            embed_dim=hidden_dim * 2,  # bidirectional LSTM
+            embed_dim=hidden_dim * 2,                      
             num_heads=8,
             dropout=dropout,
             batch_first=True
         )
         
-        # Deep residual network with skip connections
+                                                     
         self.residual_blocks = nn.ModuleList([
             ResidualBlock(hidden_dim * 2, dropout) for _ in range(3)
         ])
         
-        # Output layers with progressive dimension reduction
+                                                            
         self.output_network = nn.Sequential(
             nn.Linear(hidden_dim * 2, hidden_dim),
             nn.LayerNorm(hidden_dim),
@@ -79,7 +79,7 @@ class AdvancedStockPredictor(nn.Module):
             nn.Linear(hidden_dim // 4, 1)
         )
         
-        # Initialize weights
+                            
         self.apply(self._init_weights)
     
     def _init_weights(self, module):
@@ -96,7 +96,7 @@ class AdvancedStockPredictor(nn.Module):
                     nn.init.constant_(param, 0)
     
     def forward(self, x):
-        # Reshape the OHLCV window into a real sequence: [batch, HISTORY_DAYS, 5]
+                                                                                 
         if x.dim() != 2:
             raise ValueError(f"Expected 2D input [batch, features], got shape {tuple(x.shape)}")
         if x.size(1) < self.window_dim:
@@ -115,23 +115,23 @@ class AdvancedStockPredictor(nn.Module):
         else:
             seq = window_seq
 
-        # Per-timestep projection: [batch, HISTORY_DAYS, hidden_dim]
+                                                                    
         x = self.input_projection(seq)
         
-        # LSTM processing
-        lstm_out, _ = self.lstm(x)  # [batch, HISTORY_DAYS, hidden_dim*2]
+                         
+        lstm_out, _ = self.lstm(x)                                       
         
-        # Self-attention mechanism
-        attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)  # [batch, HISTORY_DAYS, hidden_dim*2]
-        # Use the last timestep representation for next-step forecasting
-        attn_out = attn_out[:, -1, :]  # [batch, hidden_dim*2]
+                                  
+        attn_out, _ = self.attention(lstm_out, lstm_out, lstm_out)                                       
+                                                                        
+        attn_out = attn_out[:, -1, :]                         
         
-        # Residual blocks
+                         
         out = attn_out
         for block in self.residual_blocks:
             out = block(out)
         
-        # Final prediction
+                          
         prediction = self.output_network(out)
         
         return prediction
@@ -155,7 +155,7 @@ class ResidualBlock(nn.Module):
     def forward(self, x):
         residual = x
         out = self.block(x)
-        out = out + residual  # Skip connection
+        out = out + residual                   
         out = F.relu(out)
         out = self.dropout(out)
         return out

@@ -6,7 +6,7 @@ Train the enhanced model with proper validation and regularization
 import sys
 from pathlib import Path
 
-# Allow running this file directly via `python scripts/train_advanced_model.py`
+                                                                               
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -29,27 +29,27 @@ NEWSAPI_RATE_LIMIT_EXIT_CODE = 42
 def main() -> int:
     parser = argparse.ArgumentParser(description='Train Advanced Stock Prediction Model')
     
-    # Data arguments
+                    
     parser.add_argument('--ticker', type=str, default='AAPL', help='Stock ticker symbol')
     parser.add_argument('--days', type=int, default=1825, help='Days of historical data to gather (default: 1825 = 5 years)')
     parser.add_argument('--as-of', type=str, default=None, help='End date (YYYY-MM-DD) for data/news alignment (default: today)')
     
-    # Model arguments (defaults tuned for this dataset size; medium model)
+                                                                          
     parser.add_argument('--hidden-dim', type=int, default=128, help='Hidden dimension size')
     parser.add_argument('--num-layers', type=int, default=2, help='Number of LSTM layers')
     parser.add_argument('--dropout', type=float, default=0.2, help='Dropout probability')
     
-    # Training arguments
+                        
     parser.add_argument('--epochs', type=int, default=200, help='Maximum training epochs')
     parser.add_argument('--batch-size', type=int, default=64, help='Batch size')
     parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate')
     parser.add_argument('--patience', type=int, default=30, help='Early stopping patience')
     
-    # Data split arguments
+                          
     parser.add_argument('--train-split', type=float, default=0.7, help='Training data proportion')
     parser.add_argument('--val-split', type=float, default=0.15, help='Validation data proportion')
     
-    # System arguments
+                      
     parser.add_argument('--no-gpu', action='store_true', help='Disable GPU usage')
     parser.add_argument('--checkpoint-dir', type=str, default='data/checkpoints', 
                        help='Base directory to save checkpoints (a per-ticker subfolder will be created)')
@@ -57,7 +57,7 @@ def main() -> int:
     
     args = parser.parse_args()
     
-    # Set random seeds for reproducibility
+                                          
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     if torch.cuda.is_available():
@@ -85,7 +85,7 @@ def main() -> int:
           f"{(1-args.train_split-args.val_split)*100:.0f}% test")
     print()
     
-    # Check GPU availability
+                            
     use_gpu = not args.no_gpu
     device = torch.device('cuda' if use_gpu and torch.cuda.is_available() else 'cpu')
     print(f"Device: {device}")
@@ -94,7 +94,7 @@ def main() -> int:
         print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     print()
     
-    # Gather data
+                 
     print(f"Gathering data for {args.ticker}...")
     try:
         X, y = gather_data(args.ticker, days_back=args.days, end_date=args.as_of)
@@ -111,12 +111,12 @@ def main() -> int:
         print(f"[ERROR] Error gathering data: {e}")
         return 1
     
-    # Train model
+                 
     print("Starting training...")
     print("="*70)
     
     try:
-        # Save everything into a per-ticker directory to avoid overwriting
+                                                                          
         ticker_checkpoint_dir = str(Path(args.checkpoint_dir) / args.ticker.upper())
 
         model, history, scalers, test_metrics = train_model_advanced(
@@ -140,10 +140,10 @@ def main() -> int:
         print("[SUCCESS] Training completed successfully!")
         print("="*70)
         
-        # Save additional artifacts
+                                   
         checkpoint_dir = Path(ticker_checkpoint_dir)
         
-        # Save scalers
+                      
         import pickle
         scaler_X, scaler_y = scalers
         with open(checkpoint_dir / 'scaler_X.pkl', 'wb') as f:
@@ -152,13 +152,13 @@ def main() -> int:
             pickle.dump(scaler_y, f)
         print(f"\n[SUCCESS] Scalers saved to {checkpoint_dir}")
         
-        # Save training history
+                               
         history_path = checkpoint_dir / 'training_history.json'
         with open(history_path, 'w') as f:
             json.dump(history, f, indent=2)
         print(f"[SUCCESS] Training history saved to {history_path}")
         
-        # Create a comprehensive report
+                                       
         report = {
             'timestamp': datetime.now().isoformat(),
             'ticker': args.ticker,
@@ -192,7 +192,7 @@ def main() -> int:
             json.dump(report, f, indent=2)
         print(f"[SUCCESS] Training report saved to {report_path}")
         
-        # Print final summary
+                             
         print("\n" + "="*70)
         print("TRAINING SUMMARY")
         print("="*70)

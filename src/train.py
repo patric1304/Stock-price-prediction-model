@@ -92,27 +92,27 @@ def train_model_advanced(
         test_metrics: Dictionary of test set performance
     """
     
-    # Set device
+                
     device = torch.device('cuda' if use_gpu and torch.cuda.is_available() else 'cpu')
     if verbose:
         print(f"Using device: {device}")
         if device.type == 'cuda':
             print(f"GPU: {torch.cuda.get_device_name(0)}")
     
-    # Create checkpoint directory
+                                 
     Path(checkpoint_dir).mkdir(parents=True, exist_ok=True)
     
-    # Proper train/val/test split
+                                 
     n_samples = len(X)
     indices = np.arange(n_samples)
     
-    # First split: separate test set (remaining after train+val)
+                                                                
     test_size = 1.0 - train_split - val_split
     train_val_idx, test_idx = train_test_split(
         indices, test_size=test_size, random_state=42, shuffle=False
     )
     
-    # Second split: separate train and validation
+                                                 
     val_size_adjusted = val_split / (train_split + val_split)
     train_idx, val_idx = train_test_split(
         train_val_idx, test_size=val_size_adjusted, random_state=42, shuffle=False
@@ -124,32 +124,32 @@ def train_model_advanced(
         print(f"  Val:   {len(val_idx)} samples ({len(val_idx)/n_samples*100:.1f}%)")
         print(f"  Test:  {len(test_idx)} samples ({len(test_idx)/n_samples*100:.1f}%)")
     
-    # Scale features using only training data to prevent data leakage
+                                                                     
     X_train, y_train = X[train_idx], y[train_idx]
     X_val, y_val = X[val_idx], y[val_idx]
     X_test, y_test = X[test_idx], y[test_idx]
     
-    # Fit scalers on training data only
+                                       
     X_train_scaled, y_train_scaled, scaler_X, scaler_y = scale_features(X_train, y_train)
     
-    # Transform validation and test data using training scalers
+                                                               
     X_val_scaled = scaler_X.transform(X_val)
     y_val_scaled = scaler_y.transform(y_val.reshape(-1, 1))
     
     X_test_scaled = scaler_X.transform(X_test)
     y_test_scaled = scaler_y.transform(y_test.reshape(-1, 1))
     
-    # Create datasets
+                     
     train_dataset = StockDataset(X_train_scaled, y_train_scaled)
     val_dataset = StockDataset(X_val_scaled, y_val_scaled)
     test_dataset = StockDataset(X_test_scaled, y_test_scaled)
     
-    # Create data loaders
+                         
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     
-    # Initialize model
+                      
     input_dim = X.shape[1]
     model = AdvancedStockPredictor(
         input_dim=input_dim,
@@ -165,31 +165,31 @@ def train_model_advanced(
         print(f"  Total: {total_params:,}")
         print(f"  Trainable: {trainable_params:,}")
     
-    # Loss function and optimizer
-    # Huber loss is typically more robust to price jumps/outliers than pure MSE.
+                                 
+                                                                                
     criterion = nn.SmoothL1Loss(beta=1.0)
     optimizer = torch.optim.AdamW(
         model.parameters(), 
         lr=lr, 
-        weight_decay=1e-5  # L2 regularization
+        weight_decay=1e-5                     
     )
     
-    # Learning rate scheduler (verbose removed - not supported in all PyTorch versions)
+                                                                                       
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=5
     )
     
-    # Early stopping
+                    
     early_stopping = EarlyStopping(patience=patience, min_delta=1e-5)
     
-    # Training history
+                      
     history = {
         'train_loss': [],
         'val_loss': [],
         'lr': []
     }
     
-    # Training loop
+                   
     best_val_loss = float('inf')
     
     if verbose:
@@ -198,7 +198,7 @@ def train_model_advanced(
         print(f"{'='*60}")
     
     for epoch in range(epochs):
-        # Training phase
+                        
         model.train()
         train_loss = 0.0
         for X_batch, y_batch in train_loader:
@@ -209,7 +209,7 @@ def train_model_advanced(
             loss = criterion(y_pred, y_batch)
             loss.backward()
             
-            # Gradient clipping to prevent exploding gradients
+                                                              
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             
             optimizer.step()
@@ -217,7 +217,7 @@ def train_model_advanced(
         
         train_loss /= len(train_dataset)
         
-        # Validation phase
+                          
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
@@ -229,22 +229,22 @@ def train_model_advanced(
         
         val_loss /= len(val_dataset)
         
-        # Record history
+                        
         history['train_loss'].append(train_loss)
         history['val_loss'].append(val_loss)
         history['lr'].append(optimizer.param_groups[0]['lr'])
         
-        # Learning rate scheduling
+                                  
         scheduler.step(val_loss)
         
-        # Print progress
+                        
         if verbose and (epoch + 1) % 10 == 0:
             print(f"Epoch {epoch+1}/{epochs} | "
                   f"Train Loss: {train_loss:.6f} | "
                   f"Val Loss: {val_loss:.6f} | "
                   f"LR: {optimizer.param_groups[0]['lr']:.2e}")
         
-        # Save best model
+                         
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             checkpoint_path = Path(checkpoint_dir) / 'best_model.pth'
@@ -264,17 +264,17 @@ def train_model_advanced(
                 'train_loss': train_loss,
             }, checkpoint_path)
         
-        # Early stopping
+                        
         if early_stopping(val_loss, model):
             if verbose:
                 print(f"\nEarly stopping triggered at epoch {epoch+1}")
             early_stopping.load_best_model(model)
             break
     
-    # Load best model
+                     
     early_stopping.load_best_model(model)
     
-    # Evaluate on test set
+                          
     model.eval()
     test_loss = 0.0
     all_predictions = []
@@ -292,11 +292,11 @@ def train_model_advanced(
     
     test_loss /= len(test_dataset)
     
-    # Calculate additional metrics
+                                  
     predictions = np.array(all_predictions).flatten()
     targets = np.array(all_targets).flatten()
     
-    # Inverse transform to original scale
+                                         
     predictions_original = scaler_y.inverse_transform(predictions.reshape(-1, 1)).flatten()
     targets_original = scaler_y.inverse_transform(targets.reshape(-1, 1)).flatten()
     
@@ -304,8 +304,8 @@ def train_model_advanced(
     mae = np.mean(np.abs(predictions_original - targets_original))
     rmse = np.sqrt(mse)
 
-    # MAPE is unstable/meaningless for delta/logret targets because the true values can cross 0
-    # and the unit is not price.
+                                                                                               
+                                
     mode = (target_mode or "price").strip().lower() if target_mode is not None else "price"
     if mode in {"delta", "logret"}:
         mape = None
@@ -334,7 +334,7 @@ def train_model_advanced(
         else:
             print(f"MAPE: {mape:.2f}%")
     
-    # Save training summary
+                           
     summary = {
         'timestamp': datetime.now().isoformat(),
         'epochs_trained': len(history['train_loss']),
@@ -365,7 +365,7 @@ def train_model_advanced(
 
 def train_model(X, y, epochs=20, batch_size=32, lr=1e-3):
     """Legacy training function - kept for backward compatibility"""
-    # scale
+           
     X_scaled, y_scaled, _, _ = scale_features(X, y)
     dataset = StockDataset(X_scaled, y_scaled)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
@@ -378,7 +378,7 @@ def train_model(X, y, epochs=20, batch_size=32, lr=1e-3):
         total_loss = 0.0
         for X_batch, y_batch in loader:
             optimizer.zero_grad()
-            y_batch = y_batch.view(-1, 1)  # fix shape
+            y_batch = y_batch.view(-1, 1)             
             y_pred = model(X_batch)
             loss = criterion(y_pred, y_batch)
             loss.backward()

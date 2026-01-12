@@ -71,7 +71,7 @@ def extract_block(text: str, start_pat: str, end_pat: str, flags: int = re.S) ->
 
 
 def extract_function(text: str, func_name: str) -> Optional[str]:
-    # Conservative: capture from def func_name(...) to the next top-level def/class
+                                                                                   
     pat = rf"^def\s+{re.escape(func_name)}\s*\(.*?\):\n"
     m = re.search(pat, text, flags=re.M)
     if not m:
@@ -84,19 +84,19 @@ def extract_function(text: str, func_name: str) -> Optional[str]:
 
 
 def extract_class_method(text: str, class_name: str, method_name: str) -> Optional[str]:
-    # Grab the class block first, then find method inside it
+                                                            
     class_pat = rf"^class\s+{re.escape(class_name)}\b.*?:\n"
     mc = re.search(class_pat, text, flags=re.M)
     if not mc:
         return None
     class_start = mc.start()
     class_tail = text[mc.end() :]
-    # end of class = next top-level class/def
+                                             
     m2 = re.search(r"^(class|def)\s+", class_tail, flags=re.M)
     class_end = (mc.end() + m2.start()) if m2 else len(text)
     class_block = text[class_start:class_end]
 
-    # Find method
+                 
     meth_pat = rf"^\s+def\s+{re.escape(method_name)}\s*\(.*?\):\n"
     mm = re.search(meth_pat, class_block, flags=re.M)
     if not mm:
@@ -111,7 +111,7 @@ def extract_class_method(text: str, class_name: str, method_name: str) -> Option
 def make_snippets() -> list[Snippet]:
     snippets: list[Snippet] = []
 
-    # Core files
+                
     config_py = ROOT / "src" / "config.py"
     data_gathering_py = ROOT / "src" / "data_gathering.py"
     model_py = ROOT / "src" / "model.py"
@@ -123,7 +123,7 @@ def make_snippets() -> list[Snippet]:
     train_script_py = ROOT / "scripts" / "train_advanced_model.py"
     pipeline_py = ROOT / "scripts" / "run_pipeline.py"
 
-    # 1) config
+               
     snippets.append(
         Snippet(
             title="Configuration (target + history window)",
@@ -132,7 +132,7 @@ def make_snippets() -> list[Snippet]:
         )
     )
 
-    # 2) gather_data
+                    
     dg_txt = read_text(data_gathering_py)
     gd = extract_function(dg_txt, "gather_data") or dg_txt
     snippets.append(
@@ -143,7 +143,7 @@ def make_snippets() -> list[Snippet]:
         )
     )
 
-    # 3) scaling
+                
     snippets.append(
         Snippet(
             title="Scaling (StandardScaler)",
@@ -152,14 +152,14 @@ def make_snippets() -> list[Snippet]:
         )
     )
 
-    # 4) dataset wrapper
+                        
     snippets.append(
         Snippet(
             title="PyTorch dataset wrapper", path=dataset_py, text=clip_lines(read_text(dataset_py), 80)
         )
     )
 
-    # 5) model forward
+                      
     m_txt = read_text(model_py)
     forward = extract_class_method(m_txt, "AdvancedStockPredictor", "forward") or ""
     snippets.append(
@@ -170,7 +170,7 @@ def make_snippets() -> list[Snippet]:
         )
     )
 
-    # 6) train_model_advanced
+                             
     t_txt = read_text(train_py)
     tma = extract_function(t_txt, "train_model_advanced") or t_txt
     snippets.append(
@@ -181,14 +181,14 @@ def make_snippets() -> list[Snippet]:
         )
     )
 
-    # 7) train script main (CLI)
+                                
     snippets.append(
         Snippet(
             title="Training CLI entrypoint", path=train_script_py, text=clip_lines(read_text(train_script_py), 140)
         )
     )
 
-    # 8) evaluation key funcs
+                             
     e_txt = read_text(eval_py)
     emc = extract_function(e_txt, "evaluate_model_comprehensive") or ""
     base = extract_function(e_txt, "evaluate_baseline_naive") or ""
@@ -200,7 +200,7 @@ def make_snippets() -> list[Snippet]:
         )
     )
 
-    # 9) run pipeline (batch)
+                             
     snippets.append(
         Snippet(
             title="Batch runner (train + eval list of tickers)",
@@ -217,7 +217,7 @@ def build_pdf(output_path: Path) -> None:
 
     styles = getSampleStyleSheet()
 
-    # Custom styles
+                   
     h1 = ParagraphStyle("H1", parent=styles["Heading1"], fontSize=18, spaceAfter=10)
     h2 = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=14, spaceAfter=8)
     body = ParagraphStyle("Body", parent=styles["BodyText"], fontSize=10.5, leading=14)
@@ -301,7 +301,7 @@ def build_pdf(output_path: Path) -> None:
         story.append(Paragraph(snip.title, ParagraphStyle("FileTitle", parent=h2, fontSize=12)))
         story.append(Paragraph(f"File: {snip.path.relative_to(ROOT).as_posix()}", body))
 
-        # Short explanation per snippet
+                                       
         explain = ""
         rel = snip.path.relative_to(ROOT).as_posix()
         if rel.endswith("src/config.py"):

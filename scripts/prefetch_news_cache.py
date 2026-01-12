@@ -35,7 +35,7 @@ from typing import Iterable
 import pandas as pd
 import yfinance as yf
 
-# Allow running this file directly
+                                  
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -90,14 +90,14 @@ def prefetch_for_ticker(
         query_dt = dt - timedelta(days=1)
         date_str = query_dt.strftime("%Y-%m-%d")
 
-        # Company
+                 
         stats.considered += 1
         cf = _cache_file_for(ticker, date_str)
         if cf.exists():
             stats.cache_hits += 1
         else:
             if not os.getenv("NEWS_API_KEY"):
-                # No key: audit only
+                                    
                 continue
             if max_requests_remaining <= 0:
                 stats.skipped_budget += 1
@@ -111,7 +111,7 @@ def prefetch_for_ticker(
             except Exception:
                 stats.errors += 1
 
-        # Optional global economy query
+                                       
         if include_global:
             stats.considered += 1
             gf = _cache_file_for("global economy", date_str)
