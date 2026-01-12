@@ -1,9 +1,7 @@
-# Stock Training List - Full S&P 500
+# Stock Training List - S&P 500 (One Ticker Per Company)
 # Format: One ticker per line
-# Lines starting with # are ignored
 
 # --- COMMUNICATION SERVICES ---
-GOOG
 GOOGL
 META
 NFLX
@@ -18,9 +16,7 @@ OMC
 IPG
 LYV
 PARA
-FOX
 FOXA
-NWS
 NWSA
 TTWO
 EA
