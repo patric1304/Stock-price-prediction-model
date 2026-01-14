@@ -267,7 +267,7 @@ def evaluate_baseline_naive(y_true, current_close=None, **kwargs):
     }
 
 
-def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_naive=None):
+def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_naive=None, show: bool = True):
     """Create comprehensive visualization of model performance"""
     
     predictions = metrics['predictions']
@@ -400,8 +400,11 @@ def plot_comprehensive_analysis(metrics, ticker, save_path=None, *, baseline_nai
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Plot saved to {save_path}")
-    
-    plt.show()
+
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
 
 
 def main() -> int:
@@ -410,6 +413,12 @@ def main() -> int:
     
     parser = argparse.ArgumentParser(description='Evaluate trained stock prediction model')
     parser.add_argument('--ticker', type=str, default='AAPL', help='Stock ticker')
+    parser.add_argument(
+        '--checkpoint-root',
+        type=str,
+        default='data/checkpoints_logret',
+        help='Root folder containing per-ticker subfolders with artifacts',
+    )
     parser.add_argument('--model', type=str, default=None,
                        help='Path to model checkpoint (default: data/checkpoints/<TICKER>/best_model.pth)')
     parser.add_argument('--scaler-x', type=str, default=None,
@@ -418,8 +427,30 @@ def main() -> int:
                        help='Path to saved target scaler (default: data/checkpoints/<TICKER>/scaler_y.pkl)')
     parser.add_argument('--days', type=int, default=1825, help='Days of historical data')
     parser.add_argument('--as-of', type=str, default=None, help='End date (YYYY-MM-DD) for data/news alignment (default: today)')
-    parser.add_argument('--output', type=str, default='data/evaluation_results.png',
-                       help='Path to save evaluation plots')
+    parser.add_argument(
+        '--output',
+        type=str,
+        default=None,
+        help='Path to save evaluation plots (default: <ticker_dir>/evaluation_results.png)',
+    )
+    parser.add_argument(
+        '--no-show',
+        action='store_true',
+        help='Do not open interactive plot window (for batch runs)',
+    )
+    parser.add_argument(
+        '--data-source',
+        type=str,
+        default='standard',
+        choices=['standard', 'deep'],
+        help='Which data gathering pipeline to use',
+    )
+    parser.add_argument(
+        '--news-days',
+        type=int,
+        default=30,
+        help='(deep only) Only last N days use news sentiment; earlier is neutral',
+    )
     
     args = parser.parse_args()
     
@@ -429,30 +460,15 @@ def main() -> int:
     
                  
     ticker = args.ticker.upper()
-    print(f"Gathering data for {ticker}...")
-    try:
-        X, y, meta = gather_data(ticker, days_back=args.days, return_meta=True, end_date=args.as_of)
-    except ValueError as e:
-        print(f"[ERROR] {e}")
-        print("[HINT] yfinance sometimes times out. Re-run, or try a smaller --days, or set --as-of to a fixed date.")
-        return 1
-    except Exception as e:
-        print(f"[ERROR] Failed to gather data: {e}")
-        return 1
-    print(f"Data shape: X={X.shape}, y={y.shape}\n")
-    
-                                                         
-    test_size = int(0.15 * len(X))
-    X_test = X[-test_size:]
-    y_test = y[-test_size:]
-    
-    print(f"Evaluating on test set: {len(X_test)} samples\n")
 
-                                    
-    default_dir = Path('data/checkpoints_logret') / ticker
-    model_path = Path(args.model) if args.model else (default_dir / 'best_model.pth')
-    scaler_x_path = Path(args.scaler_x) if args.scaler_x else (default_dir / 'scaler_X.pkl')
-    scaler_y_path = Path(args.scaler_y) if args.scaler_y else (default_dir / 'scaler_y.pkl')
+    checkpoint_root = Path(args.checkpoint_root)
+    ticker_dir = checkpoint_root / ticker
+
+    # Resolve artifacts. If explicit paths are provided, use them.
+    # Otherwise, use <checkpoint_root>/<TICKER>/...
+    model_path = Path(args.model) if args.model else (ticker_dir / 'best_model.pth')
+    scaler_x_path = Path(args.scaler_x) if args.scaler_x else (ticker_dir / 'scaler_X.pkl')
+    scaler_y_path = Path(args.scaler_y) if args.scaler_y else (ticker_dir / 'scaler_y.pkl')
 
     if not model_path.exists() or not scaler_x_path.exists() or not scaler_y_path.exists():
         print(
@@ -464,36 +480,91 @@ def main() -> int:
         )
         return 1
 
-    print("Loading model and scalers...")
-    model, scaler_X, scaler_y, checkpoint_target_mode = load_model_and_scalers(
-        model_path=str(model_path),
-        scaler_X_path=str(scaler_x_path),
-        scaler_y_path=str(scaler_y_path),
-        input_dim=X.shape[1],
-        device=device
-    )
-    print(f"Loaded from {default_dir}\n")
+    # Read checkpoint metadata first so we can gather data with the same history window
+    # that the model was trained on (older checkpoints may differ from current HISTORY_DAYS).
+    ck_history_days = None
+    ck_input_dim = None
+    desired_mode = 'price'
+    try:
+        ck = torch.load(str(model_path), map_location='cpu')
+        if isinstance(ck, dict):
+            tm = ck.get('target_mode')
+            if tm is not None:
+                cand = str(tm).strip().lower()
+                if cand in {'price', 'delta', 'logret'}:
+                    desired_mode = cand
 
-                                                                            
-    if checkpoint_target_mode:
-        desired_mode = str(checkpoint_target_mode).strip().lower()
-        if desired_mode in {'price', 'delta', 'logret'}:
-            print(f"Checkpoint target mode: {desired_mode}")
+            mk = ck.get('model_kwargs')
+            if isinstance(mk, dict):
+                ck_history_days = mk.get('history_days')
+                ck_input_dim = mk.get('input_dim')
+    except Exception:
+        pass
+
+    if ck_history_days is not None:
+        print(f"Checkpoint history_days: {ck_history_days}")
+    print(f"Checkpoint target mode: {desired_mode}")
+
+    print(f"Gathering data for {ticker}...")
+    try:
+        if args.data_source == 'deep':
+            from src.data_gathering_deep_experiment import gather_data_deep_experiment
+
+            X, y, meta = gather_data_deep_experiment(
+                ticker,
+                days_back=args.days,
+                news_history_days=args.news_days,
+                strict_news_cutoff=True,
+                return_meta=True,
+                target_mode=desired_mode,
+                end_date=args.as_of,
+                history_days=int(ck_history_days) if ck_history_days is not None else None,
+            )
+        else:
             X, y, meta = gather_data(
                 ticker,
                 days_back=args.days,
                 return_meta=True,
                 target_mode=desired_mode,
                 end_date=args.as_of,
+                history_days=int(ck_history_days) if ck_history_days is not None else None,
             )
-            test_size = int(0.15 * len(X))
-            X_test = X[-test_size:]
-            y_test = y[-test_size:]
-            print(f"Rebuilt evaluation data for target mode '{desired_mode}'.")
-        else:
-            desired_mode = 'price'
-    else:
-        desired_mode = 'price'
+    except ValueError as e:
+        print(f"[ERROR] {e}")
+        print("[HINT] yfinance sometimes times out. Re-run, or try a smaller --days, or set --as-of to a fixed date.")
+        return 1
+    except Exception as e:
+        print(f"[ERROR] Failed to gather data: {e}")
+        return 1
+    print(f"Data shape: X={X.shape}, y={y.shape}\n")
+
+    if ck_input_dim is not None and int(ck_input_dim) != int(X.shape[1]):
+        print(
+            f"[ERROR] Feature dim mismatch: checkpoint expects {ck_input_dim}, but gathered X has {X.shape[1]}.\n"
+            "This usually means your feature pipeline changed since the model was trained."
+        )
+        return 1
+
+    test_size = int(0.15 * len(X))
+    X_test = X[-test_size:]
+    y_test = y[-test_size:]
+    print(f"Evaluating on test set: {len(X_test)} samples\n")
+
+    print("Loading model and scalers...")
+    model, scaler_X, scaler_y, checkpoint_target_mode = load_model_and_scalers(
+        model_path=str(model_path),
+        scaler_X_path=str(scaler_x_path),
+        scaler_y_path=str(scaler_y_path),
+        input_dim=int(ck_input_dim) if ck_input_dim is not None else X.shape[1],
+        device=device
+    )
+    print(f"Loaded from {model_path.parent}\n")
+
+    # If checkpoint had a target mode, prefer it.
+    if checkpoint_target_mode:
+        cand = str(checkpoint_target_mode).strip().lower()
+        if cand in {'price', 'delta', 'logret'}:
+            desired_mode = cand
     
               
     print("Evaluating model...")
@@ -529,11 +600,24 @@ def main() -> int:
     
                   
     print("Generating visualizations...")
-    plot_comprehensive_analysis(metrics, args.ticker, args.output, baseline_naive=baseline)
+    # Default output: save into the ticker's checkpoint folder.
+    if args.output:
+        output_plot_path = Path(args.output)
+    else:
+        output_plot_path = model_path.parent / 'evaluation_results.png'
+
+    plot_comprehensive_analysis(
+        metrics,
+        args.ticker,
+        str(output_plot_path),
+        baseline_naive=baseline,
+        show=(not args.no_show),
+    )
     
                           
                                                                            
-    output_path = default_dir / 'evaluation_metrics.json'
+    # Save metrics alongside the model checkpoint used.
+    output_path = model_path.parent / 'evaluation_metrics.json'
     metrics_to_save = {k: v for k, v in metrics.items() 
                        if k not in ['predictions', 'targets']}
                                                                                                       
@@ -550,11 +634,13 @@ def main() -> int:
     print(f"\nMetrics saved to {output_path}")
 
                                                                
-    output_path_copy = Path(args.output).parent / 'evaluation_metrics.json'
-    if output_path_copy.resolve() != output_path.resolve():
-        with open(output_path_copy, 'w') as f:
-            json.dump(metrics_to_save, f, indent=2)
-        print(f"Metrics copy saved to {output_path_copy}")
+    # Back-compat: if user specified a different output folder, also drop a copy there.
+    if args.output:
+        output_path_copy = Path(args.output).parent / 'evaluation_metrics.json'
+        if output_path_copy.resolve() != output_path.resolve():
+            with open(output_path_copy, 'w') as f:
+                json.dump(metrics_to_save, f, indent=2)
+            print(f"Metrics copy saved to {output_path_copy}")
 
     return 0
 
