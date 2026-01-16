@@ -19,7 +19,7 @@ import argparse
 import json
 import pickle
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
@@ -70,6 +70,7 @@ def train_one(
     dataset_cache_dir: Path,
     use_dataset_cache: bool,
     rebuild_dataset_cache: bool,
+    history_days: int,
     hidden_dim: int,
     num_layers: int,
     dropout: float,
@@ -86,7 +87,7 @@ def train_one(
 
     # Dataset caching (Parquet)
     as_of_label = effective_as_of_label(as_of)
-    history_days = int(HISTORY_DAYS)
+    history_days = int(history_days)
 
     cache_key = DeepDatasetCacheKey(
         ticker=ticker.upper(),
@@ -113,6 +114,7 @@ def train_one(
             return_meta=True,
             target_mode=target_mode,
             end_date=as_of,
+            history_days=int(history_days),
         )
         print(f"[SUCCESS] Data: X={tuple(X.shape)} y={tuple(y.shape)}")
 
@@ -146,6 +148,7 @@ def train_one(
         hidden_dim=hidden_dim,
         num_layers=num_layers,
         dropout=dropout,
+        history_days=int(history_days),
         train_split=train_split,
         val_split=val_split,
         patience=patience,
@@ -186,6 +189,7 @@ def train_one(
             "train_split": train_split,
             "val_split": val_split,
             "as_of": as_of,
+            "history_days": int(history_days),
             "seed": seed,
         },
         "data": {
@@ -234,6 +238,13 @@ def main() -> int:
     parser.add_argument("--as-of", type=str, default=None, help="End date (YYYY-MM-DD), default today")
 
     parser.add_argument(
+        "--history-days",
+        type=int,
+        default=int(HISTORY_DAYS),
+        help="How many past days are used for the history window in features",
+    )
+
+    parser.add_argument(
         "--dataset-cache-dir",
         type=str,
         default="data/processed/deep_experiment_datasets",
@@ -277,6 +288,9 @@ def main() -> int:
 
     target_mode = (args.target_mode or TARGET_MODE or "logret").strip().lower()
 
+    # If not provided, pin 'as_of' to today's date for reproducibility across runs/evaluation.
+    as_of = args.as_of or date.today().isoformat()
+
     days_back = int(args.days) if args.days is not None else int(args.years * 365)
 
     tickers: list[str]
@@ -307,11 +321,11 @@ def main() -> int:
     else:
         print(f"Days back: {days_back} (overrides --years)")
     print(f"News days: {args.news_days} (strict cutoff)")
+    print(f"History window: {int(args.history_days)}")
     print(f"Target mode: {target_mode}")
     print(f"Checkpoint root: {checkpoint_root}")
     print(f"GPU: {'ON' if use_gpu and torch.cuda.is_available() else 'OFF'}")
-    if args.as_of:
-        print(f"As-of: {args.as_of}")
+    print(f"As-of: {as_of}")
 
     for ticker in tickers:
         try:
@@ -319,11 +333,12 @@ def main() -> int:
                 ticker=ticker,
                 days=days_back,
                 news_days=args.news_days,
-                as_of=args.as_of,
+                as_of=as_of,
                 target_mode=target_mode,
                 checkpoint_root=checkpoint_root,
                 use_gpu=use_gpu,
                 seed=args.seed,
+                history_days=int(args.history_days),
                 hidden_dim=args.hidden_dim,
                 num_layers=args.num_layers,
                 dropout=args.dropout,

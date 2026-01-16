@@ -58,6 +58,7 @@ def train_model_advanced(
     hidden_dim=256,
     num_layers=3,
     dropout=0.3,
+    history_days=None,
     train_split=0.7,
     val_split=0.15,
     patience=15,
@@ -151,12 +152,21 @@ def train_model_advanced(
     
                       
     input_dim = X.shape[1]
-    model = AdvancedStockPredictor(
-        input_dim=input_dim,
-        hidden_dim=hidden_dim,
-        num_layers=num_layers,
-        dropout=dropout
-    ).to(device)
+    if history_days is None:
+        model = AdvancedStockPredictor(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            dropout=dropout,
+        ).to(device)
+    else:
+        model = AdvancedStockPredictor(
+            input_dim=input_dim,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            dropout=dropout,
+            history_days=int(history_days),
+        ).to(device)
     
     if verbose:
         total_params = sum(p.numel() for p in model.parameters())

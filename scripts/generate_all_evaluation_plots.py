@@ -53,6 +53,8 @@ def _run_eval(
     as_of: str | None,
     data_source: str,
     news_days: int,
+    deep_use_parquet_cache: bool,
+    deep_dataset_cache_dir: str,
 ) -> int:
     # Import main only when needed.
     from scripts import evaluate_advanced_model
@@ -73,6 +75,8 @@ def _run_eval(
         argv += ["--as-of", as_of]
     if data_source == "deep":
         argv += ["--news-days", str(news_days)]
+        if deep_use_parquet_cache:
+            argv += ["--deep-use-parquet-cache", "--deep-dataset-cache-dir", str(deep_dataset_cache_dir)]
 
     old_argv = sys.argv
     try:
@@ -82,7 +86,18 @@ def _run_eval(
         sys.argv = old_argv
 
 
-def _batch(root: Path, *, label: str, data_source: str, days: int, as_of: str | None, news_days: int, only: set[str] | None) -> None:
+def _batch(
+    root: Path,
+    *,
+    label: str,
+    data_source: str,
+    days: int,
+    as_of: str | None,
+    news_days: int,
+    only: set[str] | None,
+    deep_use_parquet_cache: bool,
+    deep_dataset_cache_dir: str,
+) -> None:
     tickers = _discover_tickers(root)
     if only is not None:
         tickers = [t for t in tickers if t in only]
@@ -102,6 +117,7 @@ def _batch(root: Path, *, label: str, data_source: str, days: int, as_of: str | 
     print(f"Data source: {data_source}")
     if data_source == "deep":
         print(f"Deep news-days: {news_days}")
+        print(f"Deep Parquet cache: {'ON' if deep_use_parquet_cache else 'OFF'}")
 
     ok = 0
     fail = 0
@@ -116,6 +132,8 @@ def _batch(root: Path, *, label: str, data_source: str, days: int, as_of: str | 
                 as_of=as_of,
                 data_source=data_source,
                 news_days=news_days,
+                deep_use_parquet_cache=deep_use_parquet_cache,
+                deep_dataset_cache_dir=deep_dataset_cache_dir,
             )
             if code == 0:
                 ok += 1
@@ -141,6 +159,19 @@ def main() -> int:
     parser.add_argument("--days", type=int, default=1825, help="Days of historical data for evaluation")
     parser.add_argument("--as-of", type=str, default=None, help="End date (YYYY-MM-DD), default today")
     parser.add_argument("--deep-news-days", type=int, default=30, help="Deep evaluation: only last N days use news sentiment")
+    # Alias for a common typo.
+    parser.add_argument("--deep-news-day", dest="deep_news_days", type=int, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--deep-use-parquet-cache",
+        action="store_true",
+        help="Deep evaluation: load X/y/current_close from Parquet cache (avoids NewsAPI calls)",
+    )
+    parser.add_argument(
+        "--deep-dataset-cache-dir",
+        type=str,
+        default="data/processed/deep_experiment_datasets",
+        help="Deep evaluation: Parquet cache directory",
+    )
     parser.add_argument("--only", nargs="*", default=None, help="Only evaluate these tickers")
     parser.add_argument("--skip-old", action="store_true", help="Skip old-root batch")
     parser.add_argument("--skip-deep", action="store_true", help="Skip deep-root batch")
@@ -158,6 +189,8 @@ def main() -> int:
             as_of=args.as_of,
             news_days=args.deep_news_days,
             only=only,
+            deep_use_parquet_cache=False,
+            deep_dataset_cache_dir=args.deep_dataset_cache_dir,
         )
 
     if not args.skip_deep:
@@ -169,6 +202,8 @@ def main() -> int:
             as_of=args.as_of,
             news_days=args.deep_news_days,
             only=only,
+            deep_use_parquet_cache=bool(args.deep_use_parquet_cache),
+            deep_dataset_cache_dir=args.deep_dataset_cache_dir,
         )
 
     return 0

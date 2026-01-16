@@ -19,6 +19,13 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import json
 import re
 
+from src.deep_experiment_dataset_cache import (
+    DeepDatasetCacheKey,
+    effective_as_of_label,
+    load_dataset_parquet,
+    make_cache_path,
+)
+
 from src.model import AdvancedStockPredictor
 from src.data_gathering import gather_data
 from src.dataset import StockDataset
@@ -451,6 +458,17 @@ def main() -> int:
         default=30,
         help='(deep only) Only last N days use news sentiment; earlier is neutral',
     )
+    parser.add_argument(
+        '--deep-use-parquet-cache',
+        action='store_true',
+        help='(deep only) Load X/y/current_close from Parquet cache instead of calling NewsAPI/yfinance again',
+    )
+    parser.add_argument(
+        '--deep-dataset-cache-dir',
+        type=str,
+        default='data/processed/deep_experiment_datasets',
+        help='(deep only) Parquet cache directory used by the deep experiment trainer',
+    )
     
     args = parser.parse_args()
     
@@ -505,21 +523,73 @@ def main() -> int:
         print(f"Checkpoint history_days: {ck_history_days}")
     print(f"Checkpoint target mode: {desired_mode}")
 
+    # If user didn't specify --as-of, try to read it from the ticker's training_report.json.
+    # This prevents evaluating on a different end-date than training.
+    if args.as_of is None:
+        try:
+            tr_path = ticker_dir / 'training_report.json'
+            if tr_path.exists():
+                with open(tr_path, 'r', encoding='utf-8') as f:
+                    tr = json.load(f)
+                tr_as_of = ((tr or {}).get('configuration') or {}).get('as_of')
+                if tr_as_of:
+                    args.as_of = str(tr_as_of)
+                    print(f"Using as-of from training_report.json: {args.as_of}")
+                else:
+                    # Older deep runs stored as_of=null. Fall back to the date portion of timestamp.
+                    ts = (tr or {}).get('timestamp')
+                    if ts and isinstance(ts, str) and len(ts) >= 10:
+                        args.as_of = ts[:10]
+                        print(f"Using as-of from training timestamp: {args.as_of}")
+        except Exception:
+            pass
+
     print(f"Gathering data for {ticker}...")
     try:
         if args.data_source == 'deep':
-            from src.data_gathering_deep_experiment import gather_data_deep_experiment
+            if args.deep_use_parquet_cache:
+                as_of_label = effective_as_of_label(args.as_of)
+                hd = int(ck_history_days) if ck_history_days is not None else 30
+                cache_key = DeepDatasetCacheKey(
+                    ticker=ticker.upper(),
+                    as_of=as_of_label,
+                    days_back=int(args.days),
+                    history_days=int(hd),
+                    target_mode=str(desired_mode),
+                    news_days=int(args.news_days),
+                )
+                cache_path = make_cache_path(Path(args.deep_dataset_cache_dir), cache_key)
+                if cache_path.exists():
+                    print(f"Loading deep Parquet cache: {cache_path}")
+                    X, y, meta = load_dataset_parquet(cache_path)
+                else:
+                    print(f"[WARN] Deep Parquet cache not found: {cache_path}")
+                    print("[WARN] Falling back to live data gathering (may hit NewsAPI).")
+                    from src.data_gathering_deep_experiment import gather_data_deep_experiment
 
-            X, y, meta = gather_data_deep_experiment(
-                ticker,
-                days_back=args.days,
-                news_history_days=args.news_days,
-                strict_news_cutoff=True,
-                return_meta=True,
-                target_mode=desired_mode,
-                end_date=args.as_of,
-                history_days=int(ck_history_days) if ck_history_days is not None else None,
-            )
+                    X, y, meta = gather_data_deep_experiment(
+                        ticker,
+                        days_back=args.days,
+                        news_history_days=args.news_days,
+                        strict_news_cutoff=True,
+                        return_meta=True,
+                        target_mode=desired_mode,
+                        end_date=args.as_of,
+                        history_days=int(ck_history_days) if ck_history_days is not None else None,
+                    )
+            else:
+                from src.data_gathering_deep_experiment import gather_data_deep_experiment
+
+                X, y, meta = gather_data_deep_experiment(
+                    ticker,
+                    days_back=args.days,
+                    news_history_days=args.news_days,
+                    strict_news_cutoff=True,
+                    return_meta=True,
+                    target_mode=desired_mode,
+                    end_date=args.as_of,
+                    history_days=int(ck_history_days) if ck_history_days is not None else None,
+                )
         else:
             X, y, meta = gather_data(
                 ticker,
