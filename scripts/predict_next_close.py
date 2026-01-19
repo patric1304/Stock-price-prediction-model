@@ -165,13 +165,35 @@ def _load_yf_cached_csv(cache_file: Path):
     try:
         import pandas as pd
 
-        df = pd.read_csv(cache_file)
+        # yfinance can produce MultiIndex columns (e.g., ('Close','AAPL')).
+        # When saved to CSV naively, this becomes a two-row header like:
+        #   Date,Close,...
+        #   ,AAPL,AAPL,...
+        # Detect and read accordingly.
+        try:
+            head_lines = cache_file.read_text(encoding="utf-8").splitlines()[:2]
+        except Exception:
+            head_lines = []
+
+        has_two_row_header = len(head_lines) >= 2 and head_lines[1].startswith(",")
+        if has_two_row_header:
+            df = pd.read_csv(cache_file, header=[0, 1])
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [str(c[0]) for c in df.columns]
+        else:
+            df = pd.read_csv(cache_file)
+
         if "Date" in df.columns:
             df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
             df = df.set_index("Date")
         else:
             df.index = pd.to_datetime(df.index, errors="coerce")
         df = df.sort_index()
+
+        # Ensure numeric columns stay numeric (older caches may contain strings).
+        for col in ["Open", "High", "Low", "Close", "Adj Close", "Volume"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
         return df
     except Exception:
         return None
@@ -181,6 +203,16 @@ def _save_yf_cached_csv(df, cache_file: Path) -> None:
     try:
         cache_file.parent.mkdir(parents=True, exist_ok=True)
         out = df.copy()
+
+        # Flatten MultiIndex columns so we don't create a two-row header on disk.
+        try:
+            import pandas as pd
+
+            if isinstance(out.columns, pd.MultiIndex):
+                out.columns = [str(c[0]) for c in out.columns]
+        except Exception:
+            pass
+
         out = out.reset_index().rename(columns={out.index.name or "index": "Date"})
         out.to_csv(cache_file, index=False)
     except Exception:
@@ -191,6 +223,7 @@ def _save_yf_cached_csv(df, cache_file: Path) -> None:
 def build_latest_features_fast(
     *,
     ticker: str,
+    days_back: int,
     history_days: int,
     end_date: Optional[str],
     yf_cache_dir: Path,
@@ -205,11 +238,13 @@ def build_latest_features_fast(
     import pandas as pd
     from datetime import datetime, timedelta
 
-    # Need enough history for indicators + the HISTORY_DAYS window.
-    min_days = max(int(history_days) + 60, 180)
+    # Need enough *calendar* history for indicators + the HISTORY_DAYS trading-day window.
+    # Trading days are fewer than calendar days; for a 252-day window, fetching ~1.7x calendar
+    # days is a safe default.
+    min_days = max(int(days_back), int(history_days) + 60, int(history_days * 1.7), 200)
 
     end = datetime.today() if not end_date else datetime.strptime(end_date, "%Y-%m-%d")
-    start = end - timedelta(days=min_days)
+    start = end - timedelta(days=int(min_days))
 
     cache_file = yf_cache_dir / f"{ticker.upper()}_ohlcv.csv"
     df = None
@@ -337,14 +372,22 @@ def predict_next_close_pct(
     scaler_y,
     days_back: int,
     as_of: Optional[str],
+    cache_ttl_hours: float,
     device: torch.device,
 ) -> Tuple[float, float, str]:
     # Build features aligned to next trading day target.
+    history_days = int(getattr(model, "history_days", 0) or HISTORY_DAYS)
     if mode == "__with_news__":
         # Slow path: uses NewsAPI cache and transformers sentiment pipeline.
         from src.data_gathering import gather_data
 
-        X, _, meta = gather_data(ticker, days_back=days_back, return_meta=True, end_date=as_of)
+        X, _, meta = gather_data(
+            ticker,
+            days_back=days_back,
+            return_meta=True,
+            end_date=as_of,
+            history_days=history_days,
+        )
         x_last = X[-1, :].astype(np.float32, copy=False)
         current_close = float(meta["current_close"][-1])
         target_date = str(meta["target_date"][-1])
@@ -352,10 +395,11 @@ def predict_next_close_pct(
         # Fast path: no news, sentiment=0.
         x_last, current_close, target_date = build_latest_features_fast(
             ticker=ticker,
-            history_days=int(getattr(model, "history_days", 0) or HISTORY_DAYS),
+            days_back=days_back,
+            history_days=history_days,
             end_date=as_of,
             yf_cache_dir=Path("data/raw/yf_cache"),
-            cache_ttl_hours=6.0,
+            cache_ttl_hours=float(cache_ttl_hours),
         )
 
     x_scaled = scaler_X.transform(x_last.reshape(1, -1)).astype(np.float32, copy=False)
@@ -416,6 +460,11 @@ def main() -> int:
         help="End date (YYYY-MM-DD) for data/news alignment (default: today)",
     )
     parser.add_argument("--cpu", action="store_true", help="Force CPU")
+    parser.add_argument(
+        "--traceback",
+        action="store_true",
+        help="Print full traceback on error (useful for debugging environment issues)",
+    )
 
     args = parser.parse_args()
 
@@ -474,9 +523,15 @@ def main() -> int:
             scaler_y=scaler_y,
             days_back=args.days,
             as_of=args.as_of,
+            cache_ttl_hours=args.cache_ttl_hours,
             device=device,
         )
     except Exception as e:
+        if args.traceback:
+            import traceback
+
+            traceback.print_exc()
+
         # Import error type lazily; keep a safe fallback if import fails.
         try:
             from src.data_gathering import NewsAPIRateLimitError

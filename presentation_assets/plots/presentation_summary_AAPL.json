@@ -1,0 +1,34 @@
+{
+  "ticker": "AAPL",
+  "as_of": "2026-01-14",
+  "wide": {
+    "rmse": 3.228070735567628,
+    "directional_accuracy": 54.054054054054056,
+    "baseline": {
+      "mse": 10.517407417297363,
+      "mae": 2.2829737663269043,
+      "rmse": 3.2430552596737177,
+      "mape": 0.9882323741912842,
+      "directional_accuracy": 45.94594594594595,
+      "definition": "0 log return (equiv: next close = current close)"
+    }
+  },
+  "deep": {
+    "rmse": 3.1921996831077935,
+    "directional_accuracy": 54.09836065573771,
+    "baseline": {
+      "mse": 10.316019058227539,
+      "mae": 2.251093864440918,
+      "rmse": 3.21185601455413,
+      "mape": 0.9702243804931641,
+      "directional_accuracy": 45.90163934426229,
+      "definition": "0 log return (equiv: next close = current close)"
+    }
+  },
+  "plots": {
+    "architecture": "C:/Users/Patri/AN3_sem1/AIF/stock_price_prediction/presentation_assets/plots/architecture_diagram.png",
+    "metrics_comparison": "C:/Users/Patri/AN3_sem1/AIF/stock_price_prediction/presentation_assets/plots/metrics_comparison_AAPL.png",
+    "direction_timeline": "C:/Users/Patri/AN3_sem1/AIF/stock_price_prediction/presentation_assets/plots/direction_timeline_AAPL.png",
+    "confusion_matrix_deep": "C:/Users/Patri/AN3_sem1/AIF/stock_price_prediction/presentation_assets/plots/confusion_matrix_deep_AAPL.png"
+  }
+}

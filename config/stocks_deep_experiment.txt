@@ -3,6 +3,7 @@
 # Note: with NewsAPI free tier (~100 req/day), using 30 days of news means:
 # 1 request/day * 30 days * N tickers => 30*N requests.
 # Keeping N=3 avoids hitting the limit (90 requests).
+INTC
 AAPL
 MSFT
 JPM
