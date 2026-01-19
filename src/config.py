@@ -1,23 +1,11 @@
                
-
 import os
 
-                          
 HISTORY_DAYS = 30
-COUNTRY_CODE = "US"
-
-                         
- 
-                                            
-                                                           
-                                                                   
- 
-                                                                               
+COUNTRY_CODE = "US"                                                       
                                                                          
 TARGET_MODE = os.getenv("TARGET_MODE", "logret")
 
-                                  
-                               
 NEWS_DAYS_AVAILABLE = 15                                                
 MAX_DAILY_REQUESTS = 100                                 
 TRAINING_DATA_DAYS = 60                                      

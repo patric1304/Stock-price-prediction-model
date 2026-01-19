@@ -1,0 +1,34 @@
+{
+  "ticker": "INTC",
+  "as_of": "2026-01-17",
+  "wide": {
+    "rmse": 1.1449573752119535,
+    "directional_accuracy": 50.27322404371585,
+    "baseline": {
+      "mse": 1.3020135164260864,
+      "mae": 0.768797755241394,
+      "rmse": 1.1410580688230054,
+      "mape": 2.515444278717041,
+      "directional_accuracy": 49.18032786885246,
+      "definition": "0 log return (equiv: next close = current close)"
+    }
+  },
+  "deep": {
+    "rmse": 1.2495729193656817,
+    "directional_accuracy": 48.66666666666667,
+    "baseline": {
+      "mse": 1.5207229852676392,
+      "mae": 0.8456665277481079,
+      "rmse": 1.233175974979905,
+      "mape": 2.626619815826416,
+      "directional_accuracy": 48.66666666666667,
+      "definition": "0 log return (equiv: next close = current close)"
+    }
+  },
+  "plots": {
+    "architecture": "C:/Users/Patri/AN3_sem1/AIF/stock_price_prediction/presentation_assets/plots/architecture_diagram.png",
+    "metrics_comparison": "C:/Users/Patri/AN3_sem1/AIF/stock_price_prediction/presentation_assets/plots/metrics_comparison_INTC.png",
+    "direction_timeline": "C:/Users/Patri/AN3_sem1/AIF/stock_price_prediction/presentation_assets/plots/direction_timeline_INTC.png",
+    "confusion_matrix_deep": "C:/Users/Patri/AN3_sem1/AIF/stock_price_prediction/presentation_assets/plots/confusion_matrix_deep_INTC.png"
+  }
+}
